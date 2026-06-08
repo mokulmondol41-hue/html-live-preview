@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import android.util.Base64
 import android.util.Log
 import com.example.BuildConfig
 import com.example.data.local.HtmlProjectDao
@@ -7,9 +8,12 @@ import com.example.data.model.HtmlProject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import org.apache.commons.net.ftp.FTP
-import org.apache.commons.net.ftp.FTPClient
-import java.io.ByteArrayInputStream
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 sealed class PublishResult {
     data class Success(val url: String, val repoName: String) : PublishResult()
@@ -32,49 +36,72 @@ class HtmlProjectRepository(
         username: String,
         token: String
     ): PublishResult = withContext(Dispatchers.IO) {
-        val folderName = slugify(projectName)
 
+        val folderName = slugify(projectName)
         if (folderName.isEmpty()) {
             return@withContext PublishResult.Error("Project name cannot be empty.")
         }
 
-        val ftpHost = BuildConfig.FTP_HOST
-        val ftpUser = BuildConfig.FTP_USER
-        val ftpPass = BuildConfig.FTP_PASS
+        val cpanelHost = BuildConfig.CPANEL_HOST
+        val cpanelUser = BuildConfig.CPANEL_USER
+        val cpanelToken = BuildConfig.CPANEL_TOKEN
         val siteUrl = BuildConfig.SITE_URL
 
-        val ftp = FTPClient()
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .hostnameVerifier { _, _ -> true }
+            .build()
+
         try {
-            Log.d("FTP", "Connecting to $ftpHost")
-            ftp.connect(ftpHost, 21)
-            ftp.login(ftpUser, ftpPass)
-            ftp.enterLocalPassiveMode()
-            ftp.setFileType(FTP.BINARY_FILE_TYPE)
+            // Step 1: Create folder in public_html
+            val mkdirUrl = "https://$cpanelHost/execute/Fileman/mkdir" +
+                "?dir=/public_html&name=$folderName"
 
-            // public_html এ folder বানাও
-            val remotePath = "/public_html/$folderName"
-            ftp.makeDirectory(remotePath)
+            val mkdirReq = Request.Builder()
+                .url(mkdirUrl)
+                .header("Authorization", "cpanel $cpanelUser:$cpanelToken")
+                .post("".toRequestBody())
+                .build()
 
-            // index.html upload করো
-            val htmlBytes = htmlContent.toByteArray(Charsets.UTF_8)
-            val inputStream = ByteArrayInputStream(htmlBytes)
-            val uploaded = ftp.storeFile("$remotePath/index.html", inputStream)
-            inputStream.close()
+            client.newCall(mkdirReq).execute().use { res ->
+                Log.d("CPANEL", "mkdir: ${res.code} ${res.body?.string()?.take(100)}")
+            }
 
-            ftp.logout()
-            ftp.disconnect()
+            // Step 2: Upload index.html via save_file_content
+            val htmlBase64 = Base64.encodeToString(
+                htmlContent.toByteArray(Charsets.UTF_8),
+                Base64.NO_WRAP
+            )
 
-            if (uploaded) {
+            val uploadUrl = "https://$cpanelHost/execute/Fileman/save_file_content"
+            val body = "dir=/public_html/$folderName&filename=index.html&content=$htmlBase64&from_encoding=base64&to_encoding=utf-8"
+
+            val uploadReq = Request.Builder()
+                .url(uploadUrl)
+                .header("Authorization", "cpanel $cpanelUser:$cpanelToken")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+                .build()
+
+            val uploadRes = client.newCall(uploadReq).execute()
+            val uploadBody = uploadRes.body?.string() ?: ""
+            Log.d("CPANEL", "upload: ${uploadRes.code} $uploadBody")
+
+            val json = JSONObject(uploadBody)
+            val status = json.optInt("status", 0)
+
+            if (status == 1) {
                 val liveUrl = "$siteUrl/$folderName/"
-                Log.d("FTP", "Upload success: $liveUrl")
                 PublishResult.Success(liveUrl, folderName)
             } else {
-                PublishResult.Error("File upload failed. Check FTP permissions.")
+                val errors = json.optJSONArray("errors")
+                val errMsg = errors?.optString(0) ?: "Upload failed"
+                PublishResult.Error("Hosting failed: $errMsg")
             }
 
         } catch (e: Exception) {
-            Log.e("FTP", "FTP error", e)
-            try { ftp.disconnect() } catch (_: Exception) {}
+            Log.e("CPANEL", "Error", e)
             PublishResult.Error("Hosting failed: ${e.localizedMessage}")
         }
     }

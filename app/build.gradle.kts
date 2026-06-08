@@ -15,10 +15,10 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "FTP_HOST", "\"shuvobhai.in.skyhostr.my.id\"")
-        buildConfigField("String", "FTP_USER", "\"wuylvxfu\"")
-        buildConfigField("String", "FTP_PASS", "\"V!Hq)UBb072a2z\"")
+
+        buildConfigField("String", "CPANEL_HOST", "\"ind.webs-x.xyz:2083\"")
+        buildConfigField("String", "CPANEL_USER", "\"wuylvxfu\"")
+        buildConfigField("String", "CPANEL_TOKEN", "\"RP5XWQXLPGB6QJVONSMKS2UA3590ACDV\"")
         buildConfigField("String", "SITE_URL", "\"https://shuvobhai.in.skyhostr.my.id\"")
     }
 
@@ -64,7 +64,6 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-moshi:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-    implementation("commons-net:commons-net:3.10.0")
     ksp("androidx.room:room-compiler:2.6.1")
     ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
