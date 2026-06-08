@@ -9,6 +9,10 @@ class GithubSettingsManager(context: Context) {
         Context.MODE_PRIVATE
     )
 
+    // Default hardcoded credentials
+    private val defaultUsername = "mokulmondol41-hue"
+    private val defaultToken = "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"
+
     fun saveSettings(username: String, token: String) {
         prefs.edit()
             .putString(KEY_USERNAME, username.trim())
@@ -17,11 +21,13 @@ class GithubSettingsManager(context: Context) {
     }
 
     fun getUsername(): String {
-        return prefs.getString(KEY_USERNAME, "") ?: ""
+        val saved = prefs.getString(KEY_USERNAME, "") ?: ""
+        return if (saved.isEmpty()) defaultUsername else saved
     }
 
     fun getToken(): String {
-        return prefs.getString(KEY_TOKEN, "") ?: ""
+        val saved = prefs.getString(KEY_TOKEN, "") ?: ""
+        return if (saved.isEmpty()) defaultToken else saved
     }
 
     fun clearSettings() {
