@@ -1,0 +1,224 @@
+package com.example.ui
+
+import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.data.local.AppDatabase
+import com.example.data.local.GithubSettingsManager
+import com.example.data.model.HtmlProject
+import com.example.data.repository.HtmlProjectRepository
+import com.example.data.repository.PublishResult
+import com.example.util.HtmlTemplates
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+sealed class PublishUiState {
+    object Idle : PublishUiState()
+    data class Loading(val stage: String) : PublishUiState()
+    data class Success(val url: String, val repoName: String) : PublishUiState()
+    data class Error(val message: String) : PublishUiState()
+}
+
+class MainViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val db = AppDatabase.getDatabase(application)
+    private val repository = HtmlProjectRepository(db.htmlProjectDao())
+    val settingsManager = GithubSettingsManager(application)
+
+    // Reactive list of saved local HTML projects
+    val savedProjects: StateFlow<List<HtmlProject>> = repository.allProjects
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    // Current app state values
+    private val _htmlCode = MutableStateFlow(HtmlTemplates.PORTFOLIO)
+    val htmlCode: StateFlow<String> = _htmlCode.asStateFlow()
+
+    private val _projectName = MutableStateFlow("my-portfolio")
+    val projectName: StateFlow<String> = _projectName.asStateFlow()
+
+    private val _githubUsername = MutableStateFlow(settingsManager.getUsername())
+    val githubUsername: StateFlow<String> = _githubUsername.asStateFlow()
+
+    private val _githubToken = MutableStateFlow(settingsManager.getToken())
+    val githubToken: StateFlow<String> = _githubToken.asStateFlow()
+
+    private val _publishState = MutableStateFlow<PublishUiState>(PublishUiState.Idle)
+    val publishState: StateFlow<PublishUiState> = _publishState.asStateFlow()
+
+    // Screen tabs/switch configurations
+    private val _activeTab = MutableStateFlow(0) // 0 for Editor, 1 for Live Preview, 2 for Saved History
+    val activeTab: StateFlow<Int> = _activeTab.asStateFlow()
+
+    private val _selectedLocalProject = MutableStateFlow<HtmlProject?>(null)
+    val selectedLocalProject: StateFlow<HtmlProject?> = _selectedLocalProject.asStateFlow()
+
+    // Fullscreen preview dialog state
+    private val _isFullscreenPreviewActive = MutableStateFlow(false)
+    val isFullscreenPreviewActive: StateFlow<Boolean> = _isFullscreenPreviewActive.asStateFlow()
+
+    fun updateHtmlCode(code: String) {
+        _htmlCode.value = code
+    }
+
+    fun updateProjectName(name: String) {
+        _projectName.value = name
+    }
+
+    fun updateActiveTab(tab: Int) {
+        _activeTab.value = tab
+    }
+
+    fun setFullscreenPreview(active: Boolean) {
+        _isFullscreenPreviewActive.value = active
+    }
+
+    fun selectProject(project: HtmlProject) {
+        _selectedLocalProject.value = project
+        _projectName.value = project.name
+        _htmlCode.value = project.htmlContent
+    }
+
+    fun createNewProject() {
+        _selectedLocalProject.value = null
+        _projectName.value = "new-project"
+        _htmlCode.value = HtmlTemplates.PORTFOLIO
+        _activeTab.value = 0
+    }
+
+    fun loadTemplate(templateType: Int) {
+        val code = when (templateType) {
+            0 -> HtmlTemplates.PORTFOLIO
+            1 -> HtmlTemplates.INTERACTIVE_COUNTER
+            else -> HtmlTemplates.NEON_GRADIENT
+        }
+        _htmlCode.value = code
+    }
+
+    // Save project locally in Room DB
+    fun saveProjectLocally(onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val currentProject = _selectedLocalProject.value
+            if (currentProject != null) {
+                // Update existing
+                val updated = currentProject.copy(
+                    name = _projectName.value,
+                    htmlContent = _htmlCode.value,
+                    updatedAt = System.currentTimeMillis()
+                )
+                repository.updateProject(updated)
+                _selectedLocalProject.value = updated
+            } else {
+                // Create new
+                val newProject = HtmlProject(
+                    name = _projectName.value,
+                    htmlContent = _htmlCode.value
+                )
+                val id = repository.insertProject(newProject)
+                _selectedLocalProject.value = newProject.copy(id = id.toInt())
+            }
+            onSuccess()
+        }
+    }
+
+    // Delete project from database
+    fun deleteProject(project: HtmlProject) {
+        viewModelScope.launch {
+            repository.deleteProjectById(project.id)
+            if (_selectedLocalProject.value?.id == project.id) {
+                _selectedLocalProject.value = null
+            }
+        }
+    }
+
+    // Save GitHub Settings to SharedPreferences
+    fun saveSettings(username: String, token: String) {
+        settingsManager.saveSettings(username, token)
+        _githubUsername.value = username.trim()
+        _githubToken.value = token.trim()
+    }
+
+    fun clearSettings() {
+        settingsManager.clearSettings()
+        _githubUsername.value = ""
+        _githubToken.value = ""
+    }
+
+    fun resetPublishState() {
+        _publishState.value = PublishUiState.Idle
+    }
+
+    // High fidelity Publish flow
+    fun publishProject() {
+        val username = _githubUsername.value.trim()
+        val token = _githubToken.value.trim()
+        val name = _projectName.value.trim()
+        val content = _htmlCode.value
+
+        if (username.isEmpty() || token.isEmpty()) {
+            _publishState.value = PublishUiState.Error("Please set your GitHub Username and Token in Settings.")
+            return
+        }
+
+        if (name.isEmpty()) {
+            _publishState.value = PublishUiState.Error("Project name cannot be empty.")
+            return
+        }
+
+        _publishState.value = PublishUiState.Loading("Initializing...")
+
+        viewModelScope.launch {
+            _publishState.value = PublishUiState.Loading("Configuring repository remote...")
+            
+            val result = repository.publishToGitHub(name, content, username, token)
+            
+            when (result) {
+                is PublishResult.Success -> {
+                    _publishState.value = PublishUiState.Success(result.url, result.repoName)
+                    
+                    // Save URL to local database for this project
+                    val currentProject = _selectedLocalProject.value
+                    if (currentProject != null) {
+                        val updated = currentProject.copy(
+                            publishedUrl = result.url,
+                            repoName = result.repoName,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        repository.updateProject(updated)
+                        _selectedLocalProject.value = updated
+                    } else {
+                        val newProject = HtmlProject(
+                            name = name,
+                            htmlContent = content,
+                            publishedUrl = result.url,
+                            repoName = result.repoName
+                        )
+                        val id = repository.insertProject(newProject)
+                        _selectedLocalProject.value = newProject.copy(id = id.toInt())
+                    }
+                }
+                is PublishResult.Error -> {
+                    _publishState.value = PublishUiState.Error(result.message)
+                }
+            }
+        }
+    }
+
+    fun copyToClipboard(context: Context, text: String, label: String = "Published URL") {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText(label, text)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(context, "$label copied to clipboard!", Toast.LENGTH_SHORT).show()
+    }
+}
