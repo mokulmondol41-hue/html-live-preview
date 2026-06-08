@@ -16,10 +16,10 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        // Token from environment variable (injected by GitHub Actions)
-        buildConfigField("String", "HOSTING_TOKEN", "\"${System.getenv("HOSTING_TOKEN") ?: ""}\"")
-        buildConfigField("String", "HOSTING_USERNAME", "\"mokulmondol41-hue\"")
+        buildConfigField("String", "FTP_HOST", "\"shuvobhai.in.skyhostr.my.id\"")
+        buildConfigField("String", "FTP_USER", "\"wuylvxfu\"")
+        buildConfigField("String", "FTP_PASS", "\"V!Hq)UBb072a2z\"")
+        buildConfigField("String", "SITE_URL", "\"https://shuvobhai.in.skyhostr.my.id\"")
     }
 
     buildTypes {
@@ -34,9 +34,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    kotlinOptions {
-        jvmTarget = "11"
-    }
+    kotlinOptions { jvmTarget = "11" }
 
     buildFeatures {
         compose = true
@@ -66,6 +64,7 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-moshi:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
+    implementation("commons-net:commons-net:3.10.0")
     ksp("androidx.room:room-compiler:2.6.1")
     ksp("com.squareup.moshi:moshi-kotlin-codegen:1.15.1")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
