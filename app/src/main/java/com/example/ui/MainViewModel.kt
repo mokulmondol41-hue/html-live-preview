@@ -33,7 +33,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = HtmlProjectRepository(db.htmlProjectDao())
     val settingsManager = GithubSettingsManager(application)
 
-    // Reactive list of saved local HTML projects
     val savedProjects: StateFlow<List<HtmlProject>> = repository.allProjects
         .stateIn(
             scope = viewModelScope,
@@ -41,7 +40,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-    // Current app state values
     private val _htmlCode = MutableStateFlow(HtmlTemplates.PORTFOLIO)
     val htmlCode: StateFlow<String> = _htmlCode.asStateFlow()
 
@@ -57,32 +55,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _publishState = MutableStateFlow<PublishUiState>(PublishUiState.Idle)
     val publishState: StateFlow<PublishUiState> = _publishState.asStateFlow()
 
-    // Screen tabs/switch configurations
-    private val _activeTab = MutableStateFlow(0) // 0 for Editor, 1 for Live Preview, 2 for Saved History
+    private val _activeTab = MutableStateFlow(0)
     val activeTab: StateFlow<Int> = _activeTab.asStateFlow()
 
     private val _selectedLocalProject = MutableStateFlow<HtmlProject?>(null)
     val selectedLocalProject: StateFlow<HtmlProject?> = _selectedLocalProject.asStateFlow()
 
-    // Fullscreen preview dialog state
     private val _isFullscreenPreviewActive = MutableStateFlow(false)
     val isFullscreenPreviewActive: StateFlow<Boolean> = _isFullscreenPreviewActive.asStateFlow()
 
-    fun updateHtmlCode(code: String) {
-        _htmlCode.value = code
-    }
+    fun updateHtmlCode(code: String) { _htmlCode.value = code }
 
-    fun updateProjectName(name: String) {
-        _projectName.value = name
-    }
+    fun updateProjectName(name: String) { _projectName.value = name }
 
-    fun updateActiveTab(tab: Int) {
-        _activeTab.value = tab
-    }
+    fun updateActiveTab(tab: Int) { _activeTab.value = tab }
 
-    fun setFullscreenPreview(active: Boolean) {
-        _isFullscreenPreviewActive.value = active
-    }
+    fun setFullscreenPreview(active: Boolean) { _isFullscreenPreviewActive.value = active }
 
     fun selectProject(project: HtmlProject) {
         _selectedLocalProject.value = project
@@ -106,12 +94,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _htmlCode.value = code
     }
 
-    // Save project locally in Room DB
     fun saveProjectLocally(onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             val currentProject = _selectedLocalProject.value
             if (currentProject != null) {
-                // Update existing
                 val updated = currentProject.copy(
                     name = _projectName.value,
                     htmlContent = _htmlCode.value,
@@ -120,7 +106,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 repository.updateProject(updated)
                 _selectedLocalProject.value = updated
             } else {
-                // Create new
                 val newProject = HtmlProject(
                     name = _projectName.value,
                     htmlContent = _htmlCode.value
@@ -132,7 +117,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Delete project from database
     fun deleteProject(project: HtmlProject) {
         viewModelScope.launch {
             repository.deleteProjectById(project.id)
@@ -142,7 +126,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Save GitHub Settings to SharedPreferences
     fun saveSettings(username: String, token: String) {
         settingsManager.saveSettings(username, token)
         _githubUsername.value = username.trim()
@@ -159,14 +142,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _publishState.value = PublishUiState.Idle
     }
 
-    // High fidelity Publish flow
     fun publishProject() {
         val username = settingsManager.getUsername()
         val token = settingsManager.getToken()
         val name = _projectName.value.trim()
         val content = _htmlCode.value
-
-        }
 
         if (name.isEmpty()) {
             _publishState.value = PublishUiState.Error("Project name cannot be empty.")
@@ -177,14 +157,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             _publishState.value = PublishUiState.Loading("Configuring repository remote...")
-            
             val result = repository.publishToGitHub(name, content, username, token)
-            
             when (result) {
                 is PublishResult.Success -> {
                     _publishState.value = PublishUiState.Success(result.url, result.repoName)
-                    
-                    // Save URL to local database for this project
                     val currentProject = _selectedLocalProject.value
                     if (currentProject != null) {
                         val updated = currentProject.copy(
