@@ -8,7 +8,6 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
-import com.example.data.local.GithubSettingsManager
 import com.example.data.model.HtmlProject
 import com.example.data.repository.HtmlProjectRepository
 import com.example.data.repository.PublishResult
@@ -31,7 +30,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getDatabase(application)
     private val repository = HtmlProjectRepository(db.htmlProjectDao())
-    val settingsManager = GithubSettingsManager(application)
 
     val savedProjects: StateFlow<List<HtmlProject>> = repository.allProjects
         .stateIn(
@@ -46,12 +44,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _projectName = MutableStateFlow("my-portfolio")
     val projectName: StateFlow<String> = _projectName.asStateFlow()
 
-    private val _githubUsername = MutableStateFlow(settingsManager.getUsername())
-    val githubUsername: StateFlow<String> = _githubUsername.asStateFlow()
-
-    private val _githubToken = MutableStateFlow(settingsManager.getToken())
-    val githubToken: StateFlow<String> = _githubToken.asStateFlow()
-
     private val _publishState = MutableStateFlow<PublishUiState>(PublishUiState.Idle)
     val publishState: StateFlow<PublishUiState> = _publishState.asStateFlow()
 
@@ -65,11 +57,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isFullscreenPreviewActive: StateFlow<Boolean> = _isFullscreenPreviewActive.asStateFlow()
 
     fun updateHtmlCode(code: String) { _htmlCode.value = code }
-
     fun updateProjectName(name: String) { _projectName.value = name }
-
     fun updateActiveTab(tab: Int) { _activeTab.value = tab }
-
     fun setFullscreenPreview(active: Boolean) { _isFullscreenPreviewActive.value = active }
 
     fun selectProject(project: HtmlProject) {
@@ -86,12 +75,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadTemplate(templateType: Int) {
-        val code = when (templateType) {
+        _htmlCode.value = when (templateType) {
             0 -> HtmlTemplates.PORTFOLIO
             1 -> HtmlTemplates.INTERACTIVE_COUNTER
             else -> HtmlTemplates.NEON_GRADIENT
         }
-        _htmlCode.value = code
     }
 
     fun saveProjectLocally(onSuccess: () -> Unit = {}) {
@@ -126,25 +114,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveSettings(username: String, token: String) {
-        settingsManager.saveSettings(username, token)
-        _githubUsername.value = username.trim()
-        _githubToken.value = token.trim()
-    }
-
-    fun clearSettings() {
-        settingsManager.clearSettings()
-        _githubUsername.value = ""
-        _githubToken.value = ""
-    }
-
-    fun resetPublishState() {
-        _publishState.value = PublishUiState.Idle
-    }
+    fun resetPublishState() { _publishState.value = PublishUiState.Idle }
 
     fun publishProject() {
-        val username = settingsManager.getUsername()
-        val token = settingsManager.getToken()
         val name = _projectName.value.trim()
         val content = _htmlCode.value
 
@@ -153,32 +125,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        _publishState.value = PublishUiState.Loading("Initializing...")
+        _publishState.value = PublishUiState.Loading("Uploading to server...")
 
         viewModelScope.launch {
-            _publishState.value = PublishUiState.Loading("Configuring repository remote...")
-            val result = repository.publishToGitHub(name, content, username, token)
+            val result = repository.publishToGitHub(name, content, "", "")
             when (result) {
                 is PublishResult.Success -> {
                     _publishState.value = PublishUiState.Success(result.url, result.repoName)
                     val currentProject = _selectedLocalProject.value
                     if (currentProject != null) {
-                        val updated = currentProject.copy(
+                        repository.updateProject(currentProject.copy(
                             publishedUrl = result.url,
                             repoName = result.repoName,
                             updatedAt = System.currentTimeMillis()
-                        )
-                        repository.updateProject(updated)
-                        _selectedLocalProject.value = updated
+                        ))
                     } else {
-                        val newProject = HtmlProject(
+                        val id = repository.insertProject(HtmlProject(
+                            name = name,
+                            htmlContent = content,
+                            publishedUrl = result.url,
+                            repoName = result.repoName
+                        ))
+                        _selectedLocalProject.value = HtmlProject(
+                            id = id.toInt(),
                             name = name,
                             htmlContent = content,
                             publishedUrl = result.url,
                             repoName = result.repoName
                         )
-                        val id = repository.insertProject(newProject)
-                        _selectedLocalProject.value = newProject.copy(id = id.toInt())
                     }
                 }
                 is PublishResult.Error -> {
@@ -190,8 +164,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun copyToClipboard(context: Context, text: String, label: String = "Published URL") {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText(label, text)
-        clipboard.setPrimaryClip(clip)
-        Toast.makeText(context, "$label copied to clipboard!", Toast.LENGTH_SHORT).show()
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+        Toast.makeText(context, "$label copied!", Toast.LENGTH_SHORT).show()
     }
 }
