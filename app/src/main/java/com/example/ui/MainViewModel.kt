@@ -161,14 +161,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // High fidelity Publish flow
     fun publishProject() {
-        val username = _githubUsername.value.trim()
-        val token = _githubToken.value.trim()
+        val username = settingsManager.getUsername()
+        val token = settingsManager.getToken()
         val name = _projectName.value.trim()
         val content = _htmlCode.value
 
-        if (username.isEmpty() || token.isEmpty()) {
-            _publishState.value = PublishUiState.Error("Please set your GitHub Username and Token in Settings.")
-            return
         }
 
         if (name.isEmpty()) {
