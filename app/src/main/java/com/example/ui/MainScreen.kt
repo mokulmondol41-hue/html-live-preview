@@ -50,25 +50,11 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     // View state flow observers
     val htmlCode by viewModel.htmlCode.collectAsStateWithLifecycle()
     val projectName by viewModel.projectName.collectAsStateWithLifecycle()
-    val githubUsername by viewModel.githubUsername.collectAsStateWithLifecycle()
-    val githubToken by viewModel.githubToken.collectAsStateWithLifecycle()
     val publishState by viewModel.publishState.collectAsStateWithLifecycle()
     val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
     val savedProjects by viewModel.savedProjects.collectAsStateWithLifecycle()
     val selectedLocalProject by viewModel.selectedLocalProject.collectAsStateWithLifecycle()
     val isFullscreenActive by viewModel.isFullscreenPreviewActive.collectAsStateWithLifecycle()
-
-    var showSettingsDialog by remember { mutableStateOf(false) }
-    var inputUsername by remember { mutableStateOf("") }
-    var inputToken by remember { mutableStateOf("") }
-
-    // Synchronize dialog inputs with viewmodel
-    LaunchedEffect(showSettingsDialog) {
-        if (showSettingsDialog) {
-            inputUsername = githubUsername
-            inputToken = githubToken
-        }
-    }
 
     // Single HTML file picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -112,25 +98,7 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                         )
                     }
                 },
-                actions = {
-                    IconButton(
-                        onClick = { showSettingsDialog = true },
-                        modifier = Modifier.testTag("settings_button")
-                    ) {
-                        BadgedBox(badge = {
-                            if (githubUsername.isEmpty() || githubToken.isEmpty()) {
-                                Badge(containerColor = MaterialTheme.colorScheme.error) {
-                                    Text("!")
-                                }
-                            }
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Configure GitHub PAT"
-                            )
-                        }
-                    }
-                },
+                actions = {},
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 )
@@ -142,12 +110,7 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     text = { Text("Publish to Web", fontWeight = FontWeight.SemiBold) },
                     icon = { Icon(Icons.Default.Send, contentDescription = null) },
                     onClick = {
-                        if (githubUsername.isEmpty() || githubToken.isEmpty()) {
-                            showSettingsDialog = true
-                            Toast.makeText(context, "Please configure GitHub authentication first.", Toast.LENGTH_LONG).show()
-                        } else {
-                            viewModel.publishProject()
-                        }
+                        viewModel.publishProject()
                     },
                     modifier = Modifier.testTag("publish_fab")
                 )
@@ -346,88 +309,7 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         }
     }
 
-    // SETTINGS MODAL DIALOG (FOR GITHUB CREDENTIALS)
-    if (showSettingsDialog) {
-        AlertDialog(
-            onDismissRequest = { showSettingsDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text("GitHub Setup", fontWeight = FontWeight.Bold)
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "To publish websites and render them live on modern GitHub Pages, configure your GitHub credentials below. We make secure public GitHub repository builds.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    
-                    OutlinedTextField(
-                        value = inputUsername,
-                        onValueChange = { inputUsername = it },
-                        label = { Text("GitHub Username") },
-                        placeholder = { Text("octocat") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("settings_username_input"),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-
-                    OutlinedTextField(
-                        value = inputToken,
-                        onValueChange = { inputToken = it },
-                        label = { Text("Personal Access Token (PAT)") },
-                        placeholder = { Text("github_pat_...") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("settings_token_input"),
-                        shape = RoundedCornerShape(10.dp)
-                    )
-                    
-                    Text(
-                        text = "Secure: Stored locally in your secure app SharedPreferences. Needs 'repo' scope access.",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.saveSettings(inputUsername, inputToken)
-                        showSettingsDialog = false
-                        Toast.makeText(context, "GitHub Account Saved!", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.testTag("settings_save_button")
-                ) {
-                    Text("Save Config")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.clearSettings()
-                        showSettingsDialog = false
-                        Toast.makeText(context, "Cleared settings.", Toast.LENGTH_SHORT).show()
-                    }
-                ) {
-                    Text("Clear", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            shape = RoundedCornerShape(20.dp)
-        )
-    }
-
-    // PUBLISH PROCESS / OVERLAY FEEDBACK STATUS WINDOW TYPE
+        // PUBLISH PROCESS / OVERLAY FEEDBACK STATUS WINDOW TYPE
     when (val state = publishState) {
         is PublishUiState.Loading -> {
             Dialog(
@@ -448,7 +330,7 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     ) {
                         CircularProgressIndicator(strokeWidth = 4.dp)
                         Text(
-                            text = "Hosting Website on GitHub Pages",
+                            text = "Uploading to Web Server...",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -492,7 +374,7 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Your project is pushing to branch main in repository '${state.repoName}' and published build is live on internet!",
+                            text = "Your website is live! Visit the link below:",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -512,7 +394,7 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                             )
                         }
                         Text(
-                            text = "Note: GitHub Pages may take 1-2 minutes to first load or compile your package correctly.",
+                            text = "Your site is ready instantly!",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.SemiBold

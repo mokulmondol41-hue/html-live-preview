@@ -2,7 +2,6 @@ package com.example.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.example.BuildConfig
 
 class GithubSettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
@@ -17,23 +16,15 @@ class GithubSettingsManager(context: Context) {
             .apply()
     }
 
-    fun getUsername(): String {
-        val saved = prefs.getString(KEY_USERNAME, "") ?: ""
-        return if (saved.isEmpty()) BuildConfig.HOSTING_USERNAME else saved
-    }
+    fun getUsername(): String = prefs.getString(KEY_USERNAME, "") ?: ""
 
-    fun getToken(): String {
-        val saved = prefs.getString(KEY_TOKEN, "") ?: ""
-        return if (saved.isEmpty()) BuildConfig.HOSTING_TOKEN else saved
-    }
+    fun getToken(): String = prefs.getString(KEY_TOKEN, "") ?: ""
 
     fun clearSettings() {
         prefs.edit().clear().apply()
     }
 
-    fun hasValidCredentials(): Boolean {
-        return getUsername().isNotEmpty() && getToken().isNotEmpty()
-    }
+    fun hasValidCredentials(): Boolean = true // FTP credentials are hardcoded in BuildConfig
 
     companion object {
         private const val KEY_USERNAME = "github_username"
