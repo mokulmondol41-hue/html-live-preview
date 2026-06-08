@@ -11,11 +11,11 @@ import com.example.data.local.AppDatabase
 import com.example.data.model.HtmlProject
 import com.example.data.repository.HtmlProjectRepository
 import com.example.data.repository.PublishResult
-import com.example.util.HtmlTemplates
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -31,6 +31,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getDatabase(application)
     private val repository = HtmlProjectRepository(db.htmlProjectDao())
 
+    companion object {
+        const val MAX_HOSTED_SITES = 5
+    }
+
     val savedProjects: StateFlow<List<HtmlProject>> = repository.allProjects
         .stateIn(
             scope = viewModelScope,
@@ -38,10 +42,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-    private val _htmlCode = MutableStateFlow(HtmlTemplates.PORTFOLIO)
+    private val _htmlCode = MutableStateFlow("")
     val htmlCode: StateFlow<String> = _htmlCode.asStateFlow()
 
-    private val _projectName = MutableStateFlow("my-portfolio")
+    private val _projectName = MutableStateFlow("")
     val projectName: StateFlow<String> = _projectName.asStateFlow()
 
     private val _publishState = MutableStateFlow<PublishUiState>(PublishUiState.Idle)
@@ -69,17 +73,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun createNewProject() {
         _selectedLocalProject.value = null
-        _projectName.value = "new-project"
-        _htmlCode.value = HtmlTemplates.PORTFOLIO
+        _projectName.value = ""
+        _htmlCode.value = ""
         _activeTab.value = 0
-    }
-
-    fun loadTemplate(templateType: Int) {
-        _htmlCode.value = when (templateType) {
-            0 -> HtmlTemplates.PORTFOLIO
-            1 -> HtmlTemplates.INTERACTIVE_COUNTER
-            else -> HtmlTemplates.NEON_GRADIENT
-        }
     }
 
     fun saveProjectLocally(onSuccess: () -> Unit = {}) {
@@ -121,13 +117,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val content = _htmlCode.value
 
         if (name.isEmpty()) {
-            _publishState.value = PublishUiState.Error("Project name cannot be empty.")
+            _publishState.value = PublishUiState.Error("Please enter a project name.")
+            return
+        }
+        if (content.isEmpty()) {
+            _publishState.value = PublishUiState.Error("HTML content is empty.")
             return
         }
 
-        _publishState.value = PublishUiState.Loading("Uploading to server...")
-
         viewModelScope.launch {
+            // Check hosted site limit
+            val hostedCount = savedProjects.first().count { it.publishedUrl != null }
+            val isUpdate = _selectedLocalProject.value?.publishedUrl != null
+
+            if (!isUpdate && hostedCount >= MAX_HOSTED_SITES) {
+                _publishState.value = PublishUiState.Error(
+                    "You have reached the limit of $MAX_HOSTED_SITES hosted websites. " +
+                    "Please delete one from History before hosting a new one."
+                )
+                return@launch
+            }
+
+            _publishState.value = PublishUiState.Loading("Uploading to server...")
+
             val result = repository.publishToGitHub(name, content, "", "")
             when (result) {
                 is PublishResult.Success -> {

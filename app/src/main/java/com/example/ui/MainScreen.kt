@@ -168,25 +168,6 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Presets & Boilerplates Row
-                    Text(
-                        text = "Boilerplate Presets",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        PresetChip("⚡ Portfolio", onClick = { viewModel.loadTemplate(0) })
-                        PresetChip("🔢 Interactive Counter", onClick = { viewModel.loadTemplate(1) })
-                        PresetChip("🌌 Glowing Card", onClick = { viewModel.loadTemplate(2) })
-                    }
-                }
             }
 
             // Tabs Selector
@@ -198,19 +179,19 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                 Tab(
                     selected = activeTab == 0,
                     onClick = { viewModel.updateActiveTab(0) },
-                    text = { Text("📝 Editor", fontWeight = FontWeight.SemiBold) },
+                    text = { Text("Editor", fontWeight = FontWeight.SemiBold) },
                     modifier = Modifier.testTag("tab_editor")
                 )
                 Tab(
                     selected = activeTab == 1,
                     onClick = { viewModel.updateActiveTab(1) },
-                    text = { Text("👀 Preview", fontWeight = FontWeight.SemiBold) },
+                    text = { Text("Preview", fontWeight = FontWeight.SemiBold) },
                     modifier = Modifier.testTag("tab_preview")
                 )
                 Tab(
                     selected = activeTab == 2,
                     onClick = { viewModel.updateActiveTab(2) },
-                    text = { Text("🌐 History", fontWeight = FontWeight.SemiBold) },
+                    text = { Text("History", fontWeight = FontWeight.SemiBold) },
                     modifier = Modifier.testTag("tab_history")
                 )
             }
@@ -463,24 +444,6 @@ fun MainScreen(viewModel: MainViewModel, modifier: Modifier = Modifier) {
 }
 
 // ---------------- SUBPANE COMPOSABLES ----------------
-
-@Composable
-fun PresetChip(text: String, onClick: () -> Unit) {
-    Surface(
-        modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-        contentColor = MaterialTheme.colorScheme.primary
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
 
 @Composable
 fun CodeEditorPane(
