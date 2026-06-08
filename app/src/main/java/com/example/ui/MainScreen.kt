@@ -790,3 +790,4 @@ fun getFileName(context: Context, uri: Uri): String? {
     }
     return result
 }
+}
