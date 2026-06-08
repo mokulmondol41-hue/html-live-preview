@@ -13,7 +13,7 @@ class GithubSettingsManager(context: Context) {
     private val defaultUsername = "mokulmondol41-hue"
     private val defaultToken: String
         get() {
-            val encoded = "Z2hwX3JPY0RhOG9SdzVJZVlpVUVpcU1VRUMyc1RsVFBmdDF2cXRZRw=="
+            val encoded = "Z2hwX2ZkMXB5VFZub3U0cFRsU1BzaGJtQ2EyenJRc1ZaWTIxWDNadw=="
             return String(Base64.decode(encoded, Base64.DEFAULT))
         }
 
