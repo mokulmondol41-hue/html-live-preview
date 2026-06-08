@@ -1,6 +1,5 @@
 package com.example.data.repository
 
-import android.util.Base64
 import android.util.Log
 import com.example.BuildConfig
 import com.example.data.local.HtmlProjectDao
@@ -9,10 +8,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 sealed class PublishResult {
@@ -46,46 +48,53 @@ class HtmlProjectRepository(
         val cpanelUser = BuildConfig.CPANEL_USER
         val cpanelToken = BuildConfig.CPANEL_TOKEN
         val siteUrl = BuildConfig.SITE_URL
+        val authHeader = "cpanel $cpanelUser:$cpanelToken"
 
         val client = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
             .hostnameVerifier { _, _ -> true }
             .build()
 
         try {
-            // Step 1: Create folder in public_html
-            val mkdirUrl = "https://$cpanelHost/execute/Fileman/mkdir" +
-                "?dir=/public_html&name=$folderName"
-
+            // Step 1: Create folder
+            val mkdirUrl = "https://$cpanelHost/execute/Fileman/mkdir?" +
+                "dir=%2Fpublic_html&name=$folderName"
             val mkdirReq = Request.Builder()
                 .url(mkdirUrl)
-                .header("Authorization", "cpanel $cpanelUser:$cpanelToken")
+                .header("Authorization", authHeader)
                 .post("".toRequestBody())
                 .build()
-
             client.newCall(mkdirReq).execute().use { res ->
-                Log.d("CPANEL", "mkdir: ${res.code} ${res.body?.string()?.take(100)}")
+                Log.d("CPANEL", "mkdir: ${res.code}")
             }
 
-            // Step 2: Upload index.html via save_file_content
-            val htmlBase64 = Base64.encodeToString(
-                htmlContent.toByteArray(Charsets.UTF_8),
-                Base64.NO_WRAP
-            )
+            // Step 2: Upload via multipart - cPanel /execute/Fileman/upload_files
+            val tmpFile = File.createTempFile("index", ".html")
+            tmpFile.writeText(htmlContent, Charsets.UTF_8)
 
-            val uploadUrl = "https://$cpanelHost/execute/Fileman/save_file_content"
-            val body = "dir=/public_html/$folderName&filename=index.html&content=$htmlBase64&from_encoding=base64&to_encoding=utf-8"
+            val multipart = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("dir", "/public_html/$folderName")
+                .addFormDataPart(
+                    "file",
+                    "index.html",
+                    tmpFile.asRequestBody("text/html".toMediaType())
+                )
+                .build()
 
+            val uploadUrl = "https://$cpanelHost/execute/Fileman/upload_files"
             val uploadReq = Request.Builder()
                 .url(uploadUrl)
-                .header("Authorization", "cpanel $cpanelUser:$cpanelToken")
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+                .header("Authorization", authHeader)
+                .post(multipart)
                 .build()
 
             val uploadRes = client.newCall(uploadReq).execute()
             val uploadBody = uploadRes.body?.string() ?: ""
+            tmpFile.delete()
+
             Log.d("CPANEL", "upload: ${uploadRes.code} $uploadBody")
 
             val json = JSONObject(uploadBody)
@@ -96,7 +105,8 @@ class HtmlProjectRepository(
                 PublishResult.Success(liveUrl, folderName)
             } else {
                 val errors = json.optJSONArray("errors")
-                val errMsg = errors?.optString(0) ?: "Upload failed"
+                val errMsg = if (errors != null && errors.length() > 0)
+                    errors.getString(0) else "Upload failed. Check permissions."
                 PublishResult.Error("Hosting failed: $errMsg")
             }
 
