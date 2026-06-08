@@ -16,6 +16,10 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Token from environment variable (injected by GitHub Actions)
+        buildConfigField("String", "HOSTING_TOKEN", "\"${System.getenv("HOSTING_TOKEN") ?: ""}\"")
+        buildConfigField("String", "HOSTING_USERNAME", "\"mokulmondol41-hue\"")
     }
 
     buildTypes {

@@ -9,6 +9,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      HOSTING_TOKEN: ${{ secrets.HOSTING_TOKEN }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
