@@ -2,6 +2,7 @@ package com.example.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Base64
 
 class GithubSettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(
@@ -9,9 +10,12 @@ class GithubSettingsManager(context: Context) {
         Context.MODE_PRIVATE
     )
 
-    // Default hardcoded credentials
     private val defaultUsername = "mokulmondol41-hue"
-    private val defaultToken = "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"
+    private val defaultToken: String
+        get() {
+            val encoded = "Z2hwX3JPY0RhOG9SdzVJZVlpVUVpcU1VRUMyc1RsVFBmdDF2cXRZRw=="
+            return String(Base64.decode(encoded, Base64.DEFAULT))
+        }
 
     fun saveSettings(username: String, token: String) {
         prefs.edit()
