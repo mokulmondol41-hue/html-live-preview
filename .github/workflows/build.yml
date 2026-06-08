@@ -29,11 +29,17 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon --info 2>&1 | grep -A3 "error:\|ERROR\|Exception" | head -60
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Find APK
+        run: find . -name "*.apk" 2>/dev/null
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: HTML-Live-Preview-debug
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
           retention-days: 7
