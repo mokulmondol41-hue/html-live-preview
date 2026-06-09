@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.HtmlHost" parent="Theme.Material3.Light.NoActionBar">
-        <item name="colorPrimary">@color/primary</item>
-        <item name="colorOnPrimary">@color/white</item>
-        <item name="android:windowBackground">@color/background</item>
-        <item name="android:statusBarColor">@color/white</item>
+    <style name="Theme.HtmlHost" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">#1A56DB</item>
+        <item name="colorPrimaryVariant">#1342B0</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#0043A8</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+        <item name="android:windowBackground">#F0F4FF</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>
