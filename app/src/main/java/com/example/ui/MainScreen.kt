@@ -84,7 +84,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 },
                 navigationIcon = {
                     Icon(
-                        imageVector = Icons.Default.Build,
+                        imageVector = Icons.Default.Settings,
                         contentDescription = null,
                         modifier = Modifier.padding(start = 12.dp)
                     )
@@ -105,7 +105,7 @@ fun MainScreen(viewModel: MainViewModel) {
             if (activeTab != 2) {
                 ExtendedFloatingActionButton(
                     onClick = { viewModel.publishProject() },
-                    icon = { Icon(Icons.Default.Send, contentDescription = null) },
+                    icon = { Icon(Icons.Default.ArrowForward, contentDescription = null) },
                     text = { Text("Publish to Web") },
                     containerColor = MaterialTheme.colorScheme.primary
                 )
@@ -204,7 +204,7 @@ fun MainScreen(viewModel: MainViewModel) {
             is PublishUiState.Success -> {
                 AlertDialog(
                     onDismissRequest = { viewModel.resetPublishState() },
-                    icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
+                    icon = { Icon(Icons.Default.Check, contentDescription = null) },
                     title = { Text("Hosted Successfully!") },
                     text = {
                         Column {
@@ -235,7 +235,7 @@ fun MainScreen(viewModel: MainViewModel) {
             is PublishUiState.Error -> {
                 AlertDialog(
                     onDismissRequest = { viewModel.resetPublishState() },
-                    icon = { Icon(Icons.Default.Warning, contentDescription = null) },
+                    icon = { Icon(Icons.Default.Info, contentDescription = null) },
                     title = { Text("Hosting Failed") },
                     text = { Text(state.message) },
                     confirmButton = {
@@ -264,7 +264,7 @@ fun CodeEditorPane(
             horizontalArrangement = Arrangement.End
         ) {
             TextButton(onClick = onSave) {
-                Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Save Draft")
             }
@@ -297,7 +297,7 @@ fun LivePreviewPane(
             horizontalArrangement = Arrangement.End
         ) {
             IconButton(onClick = onFullscreen) {
-                Icon(Icons.Default.Fullscreen, contentDescription = "Fullscreen")
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Fullscreen")
             }
         }
         WebViewContainer(htmlCode = htmlCode, modifier = Modifier.weight(1f))
@@ -364,7 +364,7 @@ fun HistoryLayout(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        Icons.Default.History,
+                        Icons.Default.Refresh,
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.outline
