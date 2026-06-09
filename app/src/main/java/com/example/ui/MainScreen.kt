@@ -7,17 +7,21 @@ import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -34,30 +38,26 @@ import java.util.*
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
-
     val htmlCode by viewModel.htmlCode.collectAsStateWithLifecycle()
     val projectName by viewModel.projectName.collectAsStateWithLifecycle()
     val publishState by viewModel.publishState.collectAsStateWithLifecycle()
     val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
     val savedProjects by viewModel.savedProjects.collectAsStateWithLifecycle()
-    val selectedProject by viewModel.selectedLocalProject.collectAsStateWithLifecycle()
     val isFullscreen by viewModel.isFullscreenPreviewActive.collectAsStateWithLifecycle()
 
     val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
             try {
-                val inputStream = context.contentResolver.openInputStream(it)
-                val content = inputStream?.bufferedReader()?.readText() ?: ""
-                inputStream?.close()
+                val stream = context.contentResolver.openInputStream(it)
+                val content = stream?.bufferedReader()?.readText() ?: ""
+                stream?.close()
                 viewModel.updateHtmlCode(content)
-                val fileName = getFileName(context, it)
-                if (fileName != null) {
-                    val name = fileName.removeSuffix(".html").removeSuffix(".htm")
-                    viewModel.updateProjectName(name)
+                getFileName(context, it)?.let { name ->
+                    viewModel.updateProjectName(name.removeSuffix(".html").removeSuffix(".htm"))
                 }
-                Toast.makeText(context, "File imported!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "File imported successfully", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(context, "Failed to read file", Toast.LENGTH_SHORT).show()
             }
@@ -65,118 +65,165 @@ fun MainScreen(viewModel: MainViewModel) {
     }
 
     if (isFullscreen) {
-        FullscreenPreview(
-            htmlCode = htmlCode,
-            onClose = { viewModel.setFullscreenPreview(false) }
-        )
+        FullscreenPreview(htmlCode = htmlCode, onClose = { viewModel.setFullscreenPreview(false) })
         return
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Live HTML & Host",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
-                },
-                navigationIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = null,
-                        modifier = Modifier.padding(start = 12.dp)
-                    )
-                },
-                actions = {
-                    if (selectedProject != null) {
-                        IconButton(onClick = { viewModel.createNewProject() }) {
-                            Icon(Icons.Default.Add, contentDescription = "New Project")
-                        }
+            Surface(
+                shadowElevation = 8.dp,
+                color = Color.White
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF1A56DB)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Code, contentDescription = null,
+                            tint = Color.White, modifier = Modifier.size(20.dp))
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
-            )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Live HTML & Host",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            color = Color(0xFF111827))
+                        Text("Build & publish websites",
+                            fontSize = 11.sp,
+                            color = Color(0xFF6B7280))
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(onClick = { viewModel.createNewProject() }) {
+                        Icon(Icons.Default.Add, contentDescription = "New Project",
+                            tint = Color(0xFF1A56DB))
+                    }
+                }
+            }
         },
         floatingActionButton = {
             if (activeTab != 2) {
-                ExtendedFloatingActionButton(
+                FloatingActionButton(
                     onClick = { viewModel.publishProject() },
-                    icon = { Icon(Icons.Default.ArrowForward, contentDescription = null) },
-                    text = { Text("Publish to Web") },
-                    containerColor = MaterialTheme.colorScheme.primary
-                )
+                    containerColor = Color(0xFF1A56DB),
+                    contentColor = Color.White,
+                    modifier = Modifier.shadow(12.dp, RoundedCornerShape(16.dp))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Publish to Web", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
             }
-        }
-    ) { paddingValues ->
-
+        },
+        containerColor = Color(0xFFF0F4FF)
+    ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+            modifier = Modifier.fillMaxSize().padding(padding)
         ) {
-            // Project name + Import button
-            Row(
+            // Project name + import
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(12.dp)
+                    .shadow(6.dp, RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
-                OutlinedTextField(
-                    value = projectName,
-                    onValueChange = { viewModel.updateProjectName(it) },
-                    label = { Text("Project Name") },
-                    placeholder = { Text("my-website") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    leadingIcon = {
-                        Icon(Icons.Default.List, contentDescription = null)
-                    }
-                )
-                Button(
-                    onClick = { filePickerLauncher.launch("text/*") },
-                    modifier = Modifier.height(56.dp)
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Import")
+                    OutlinedTextField(
+                        value = projectName,
+                        onValueChange = { viewModel.updateProjectName(it) },
+                        label = { Text("Project Name") },
+                        placeholder = { Text("my-website") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        leadingIcon = {
+                            Icon(Icons.Default.FolderOpen, contentDescription = null,
+                                tint = Color(0xFF1A56DB))
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF1A56DB),
+                            focusedLabelColor = Color(0xFF1A56DB)
+                        )
+                    )
+                    Button(
+                        onClick = { filePickerLauncher.launch("text/*") },
+                        modifier = Modifier.height(56.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A56DB)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
+                    ) {
+                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Import", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
             // Tabs
-            TabRow(selectedTabIndex = activeTab) {
-                Tab(
-                    selected = activeTab == 0,
-                    onClick = { viewModel.updateActiveTab(0) },
-                    text = { Text("Editor") }
-                )
-                Tab(
-                    selected = activeTab == 1,
-                    onClick = { viewModel.updateActiveTab(1) },
-                    text = { Text("Preview") }
-                )
-                Tab(
-                    selected = activeTab == 2,
-                    onClick = { viewModel.updateActiveTab(2) },
-                    text = { Text("History") }
-                )
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .shadow(4.dp, RoundedCornerShape(12.dp)),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White)
+            ) {
+                TabRow(
+                    selectedTabIndex = activeTab,
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF1A56DB),
+                    indicator = { tabPositions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            modifier = Modifier.tabIndicatorOffset(tabPositions[activeTab]),
+                            color = Color(0xFF1A56DB)
+                        )
+                    }
+                ) {
+                    listOf(
+                        Pair(Icons.Default.Code, "Editor"),
+                        Pair(Icons.Default.Visibility, "Preview"),
+                        Pair(Icons.Default.History, "History")
+                    ).forEachIndexed { index, (icon, label) ->
+                        Tab(
+                            selected = activeTab == index,
+                            onClick = { viewModel.updateActiveTab(index) },
+                            icon = { Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            text = { Text(label, fontWeight = if (activeTab == index) FontWeight.Bold else FontWeight.Normal, fontSize = 13.sp) },
+                            selectedContentColor = Color(0xFF1A56DB),
+                            unselectedContentColor = Color(0xFF6B7280)
+                        )
+                    }
+                }
             }
 
-            // Tab content
+            Spacer(modifier = Modifier.height(8.dp))
+
             when (activeTab) {
-                0 -> CodeEditorPane(
-                    htmlCode = htmlCode,
+                0 -> CodeEditorPane(htmlCode = htmlCode,
                     onCodeChange = { viewModel.updateHtmlCode(it) },
-                    onSave = { viewModel.saveProjectLocally() }
-                )
-                1 -> LivePreviewPane(
-                    htmlCode = htmlCode,
-                    onFullscreen = { viewModel.setFullscreenPreview(true) }
-                )
+                    onSave = { viewModel.saveProjectLocally() })
+                1 -> LivePreviewPane(htmlCode = htmlCode,
+                    onFullscreen = { viewModel.setFullscreenPreview(true) })
                 2 -> HistoryLayout(
                     savedProjects = savedProjects,
                     onSelectProject = { viewModel.selectProject(it) },
@@ -185,18 +232,18 @@ fun MainScreen(viewModel: MainViewModel) {
             }
         }
 
-        // Publish state dialogs
+        // Publish state overlays
         when (val state = publishState) {
             is PublishUiState.Loading -> {
                 Dialog(onDismissRequest = {}) {
-                    Card(shape = MaterialTheme.shapes.large) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator()
+                    Card(shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.shadow(16.dp, RoundedCornerShape(20.dp)),
+                        colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Column(modifier = Modifier.padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = Color(0xFF1A56DB), strokeWidth = 3.dp)
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text(state.stage, fontWeight = FontWeight.Medium)
+                            Text(state.stage, fontWeight = FontWeight.SemiBold, color = Color(0xFF111827))
                         }
                     }
                 }
@@ -204,30 +251,46 @@ fun MainScreen(viewModel: MainViewModel) {
             is PublishUiState.Success -> {
                 AlertDialog(
                     onDismissRequest = { viewModel.resetPublishState() },
-                    icon = { Icon(Icons.Default.Check, contentDescription = null) },
-                    title = { Text("Hosted Successfully!") },
+                    shape = RoundedCornerShape(20.dp),
+                    containerColor = Color.White,
+                    icon = {
+                        Box(modifier = Modifier.size(48.dp).clip(CircleShape)
+                            .background(Color(0xFFDBEAFE)),
+                            contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null,
+                                tint = Color(0xFF1A56DB), modifier = Modifier.size(28.dp))
+                        }
+                    },
+                    title = { Text("Website is Live!", fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF111827)) },
                     text = {
                         Column {
-                            Text("Your website is live:")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = state.url,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 13.sp
-                            )
+                            Text("Your website has been published successfully.",
+                                color = Color(0xFF6B7280), fontSize = 13.sp)
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Card(shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFDBEAFE))) {
+                                Text(state.url, modifier = Modifier.padding(10.dp),
+                                    color = Color(0xFF1A56DB), fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium)
+                            }
                         }
                     },
                     confirmButton = {
-                        TextButton(onClick = {
+                        Button(onClick = {
                             viewModel.copyToClipboard(context, state.url)
                             viewModel.resetPublishState()
-                        }) {
-                            Text("Copy Link")
+                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A56DB)),
+                            shape = RoundedCornerShape(10.dp)) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null,
+                                modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Copy Link", fontWeight = FontWeight.Bold)
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { viewModel.resetPublishState() }) {
-                            Text("Close")
+                            Text("Close", color = Color(0xFF6B7280))
                         }
                     }
                 )
@@ -235,12 +298,24 @@ fun MainScreen(viewModel: MainViewModel) {
             is PublishUiState.Error -> {
                 AlertDialog(
                     onDismissRequest = { viewModel.resetPublishState() },
-                    icon = { Icon(Icons.Default.Info, contentDescription = null) },
-                    title = { Text("Hosting Failed") },
-                    text = { Text(state.message) },
+                    shape = RoundedCornerShape(20.dp),
+                    containerColor = Color.White,
+                    icon = {
+                        Box(modifier = Modifier.size(48.dp).clip(CircleShape)
+                            .background(Color(0xFFFEE2E2)),
+                            contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.ErrorOutline, contentDescription = null,
+                                tint = Color(0xFFDC2626), modifier = Modifier.size(28.dp))
+                        }
+                    },
+                    title = { Text("Hosting Failed", fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF111827)) },
+                    text = { Text(state.message, color = Color(0xFF6B7280), fontSize = 13.sp) },
                     confirmButton = {
-                        TextButton(onClick = { viewModel.resetPublishState() }) {
-                            Text("Dismiss")
+                        Button(onClick = { viewModel.resetPublishState() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                            shape = RoundedCornerShape(10.dp)) {
+                            Text("Dismiss", fontWeight = FontWeight.Bold)
                         }
                     }
                 )
@@ -251,64 +326,61 @@ fun MainScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-fun CodeEditorPane(
-    htmlCode: String,
-    onCodeChange: (String) -> Unit,
-    onSave: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
+fun CodeEditorPane(htmlCode: String, onCodeChange: (String) -> Unit, onSave: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onSave) {
-                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Save, contentDescription = null,
+                    modifier = Modifier.size(16.dp), tint = Color(0xFF1A56DB))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Save Draft")
+                Text("Save Draft", color = Color(0xFF1A56DB), fontWeight = FontWeight.SemiBold)
             }
         }
-        OutlinedTextField(
-            value = htmlCode,
-            onValueChange = onCodeChange,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            placeholder = { Text("Write HTML code here...") },
-            textStyle = LocalTextStyle.current.copy(
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp
+        Card(modifier = Modifier.fillMaxSize().shadow(4.dp, RoundedCornerShape(16.dp)),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            OutlinedTextField(
+                value = htmlCode,
+                onValueChange = onCodeChange,
+                modifier = Modifier.fillMaxSize().padding(4.dp),
+                placeholder = { Text("Write your HTML code here...",
+                    color = Color(0xFF6B7280), fontSize = 13.sp) },
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp,
+                    color = Color(0xFF111827)
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent
+                )
             )
-        )
+        }
     }
 }
 
 @Composable
-fun LivePreviewPane(
-    htmlCode: String,
-    onFullscreen: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            IconButton(onClick = onFullscreen) {
-                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Fullscreen")
+fun LivePreviewPane(htmlCode: String, onFullscreen: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onFullscreen) {
+                Icon(Icons.Default.Fullscreen, contentDescription = null,
+                    modifier = Modifier.size(16.dp), tint = Color(0xFF1A56DB))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Fullscreen", color = Color(0xFF1A56DB), fontWeight = FontWeight.SemiBold)
             }
         }
-        WebViewContainer(htmlCode = htmlCode, modifier = Modifier.weight(1f))
+        Card(modifier = Modifier.fillMaxSize().shadow(4.dp, RoundedCornerShape(16.dp)),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            WebViewContainer(htmlCode = htmlCode, modifier = Modifier.fillMaxSize()
+                .clip(RoundedCornerShape(16.dp)))
+        }
     }
 }
 
 @Composable
-fun WebViewContainer(
-    htmlCode: String,
-    modifier: Modifier = Modifier
-) {
+fun WebViewContainer(htmlCode: String, modifier: Modifier = Modifier) {
     AndroidView(
         factory = { context ->
             WebView(context).apply {
@@ -321,13 +393,7 @@ fun WebViewContainer(
             }
         },
         update = { webView ->
-            webView.loadDataWithBaseURL(
-                "https://localhost/",
-                htmlCode,
-                "text/html",
-                "UTF-8",
-                null
-            )
+            webView.loadDataWithBaseURL("https://localhost/", htmlCode, "text/html", "UTF-8", null)
         },
         modifier = modifier.fillMaxWidth()
     )
@@ -337,13 +403,13 @@ fun WebViewContainer(
 fun FullscreenPreview(htmlCode: String, onClose: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize()) {
         WebViewContainer(htmlCode = htmlCode, modifier = Modifier.fillMaxSize())
-        IconButton(
+        FloatingActionButton(
             onClick = onClose,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp)
+            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp).size(40.dp),
+            containerColor = Color(0xFF1A56DB),
+            contentColor = Color.White
         ) {
-            Icon(Icons.Default.Close, contentDescription = "Close")
+            Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -354,60 +420,64 @@ fun HistoryLayout(
     onSelectProject: (HtmlProject) -> Unit,
     onDeleteProject: (HtmlProject) -> Unit
 ) {
-    val hostedCount = savedProjects.count { it.publishedUrl != null }
+    val hostedCount = savedProjects.count { !it.publishedUrl.isNullOrEmpty() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         if (savedProjects.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.outline
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "No projects yet",
-                        color = MaterialTheme.colorScheme.outline
-                    )
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp)) {
+                    Box(modifier = Modifier.size(80.dp).clip(CircleShape)
+                        .background(Color(0xFFDBEAFE)),
+                        contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = null,
+                            tint = Color(0xFF1A56DB), modifier = Modifier.size(36.dp))
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("No Projects Yet", fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp, color = Color(0xFF111827))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Create your first website and publish it to the web.",
+                        color = Color(0xFF6B7280), fontSize = 13.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
         } else {
-            // Hosted site count
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(12.dp)
+                    .shadow(4.dp, RoundedCornerShape(14.dp)),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (hostedCount >= 5)
-                        MaterialTheme.colorScheme.errorContainer
-                    else
-                        MaterialTheme.colorScheme.primaryContainer
+                    containerColor = if (hostedCount >= 5) Color(0xFFFEE2E2) else Color(0xFFDBEAFE)
                 )
             ) {
-                Text(
-                    text = "Hosted sites: $hostedCount / 5" +
-                        if (hostedCount >= 5) " — Delete one to host new" else "",
-                    modifier = Modifier.padding(12.dp),
-                    fontWeight = FontWeight.Medium,
-                    color = if (hostedCount >= 5)
-                        MaterialTheme.colorScheme.onErrorContainer
-                    else
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                Row(modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (hostedCount >= 5) Icons.Default.Warning else Icons.Default.CloudDone,
+                        contentDescription = null,
+                        tint = if (hostedCount >= 5) Color(0xFFDC2626) else Color(0xFF1A56DB),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        if (hostedCount >= 5)
+                            "Limit reached ($hostedCount/5) — Delete one to host new"
+                        else
+                            "Hosted websites: $hostedCount / 5",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp,
+                        color = if (hostedCount >= 5) Color(0xFFDC2626) else Color(0xFF1342B0)
+                    )
+                }
             }
 
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(savedProjects) { project ->
-                    ProjectCard(
-                        project = project,
+            LazyColumn(modifier = Modifier.fillMaxSize()
+                .padding(horizontal = 12.dp)) {
+                items(savedProjects, key = { it.id }) { project ->
+                    ProjectCard(project = project,
                         onSelect = { onSelectProject(project) },
-                        onDelete = { onDeleteProject(project) }
-                    )
+                        onDelete = { onDeleteProject(project) })
                 }
             }
         }
@@ -415,52 +485,62 @@ fun HistoryLayout(
 }
 
 @Composable
-fun ProjectCard(
-    project: HtmlProject,
-    onSelect: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val dateFormat = remember { SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()) }
+fun ProjectCard(project: HtmlProject, onSelect: () -> Unit, onDelete: () -> Unit) {
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
+    val isHosted = !project.publishedUrl.isNullOrEmpty()
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
+            .shadow(5.dp, RoundedCornerShape(16.dp)),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
         onClick = onSelect
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = project.name,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp
+        Row(modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+
+            Box(modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
+                .background(if (isHosted) Color(0xFFDBEAFE) else Color(0xFFF3F4F6)),
+                contentAlignment = Alignment.Center) {
+                Icon(
+                    if (isHosted) Icons.Default.Language else Icons.Default.Description,
+                    contentDescription = null,
+                    tint = if (isHosted) Color(0xFF1A56DB) else Color(0xFF6B7280),
+                    modifier = Modifier.size(22.dp)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                if (project.publishedUrl != null) {
-                    Text(
-                        text = project.publishedUrl,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(project.name, fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp, color = Color(0xFF111827))
+                Spacer(modifier = Modifier.height(3.dp))
+                if (isHosted) {
+                    Text(project.publishedUrl ?: "", fontSize = 11.sp,
+                        color = Color(0xFF1A56DB), fontWeight = FontWeight.Medium)
                 } else {
-                    Text(
-                        text = "Draft — ${dateFormat.format(Date(project.updatedAt))}",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    Text("Draft — ${dateFormat.format(Date(project.updatedAt))}",
+                        fontSize = 11.sp, color = Color(0xFF6B7280))
                 }
             }
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error
-                )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            if (isHosted) {
+                Box(modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFDBEAFE)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text("LIVE", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF1A56DB))
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+
+            IconButton(onClick = onDelete,
+                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFFEE2E2))) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete",
+                    tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -469,8 +549,7 @@ fun ProjectCard(
 fun getFileName(context: android.content.Context, uri: Uri): String? {
     var result: String? = null
     if (uri.scheme == "content") {
-        val cursor = context.contentResolver.query(uri, null, null, null, null)
-        cursor?.use {
+        context.contentResolver.query(uri, null, null, null, null)?.use {
             if (it.moveToFirst()) {
                 val idx = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
                 if (idx >= 0) result = it.getString(idx)

@@ -9,6 +9,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
 import com.example.data.model.HtmlProject
+import com.example.data.repository.DeleteResult
 import com.example.data.repository.HtmlProjectRepository
 import com.example.data.repository.PublishResult
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,16 +32,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.getDatabase(application)
     private val repository = HtmlProjectRepository(db.htmlProjectDao())
 
-    companion object {
-        const val MAX_HOSTED_SITES = 5
-    }
+    companion object { const val MAX_HOSTED_SITES = 5 }
 
     val savedProjects: StateFlow<List<HtmlProject>> = repository.allProjects
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _htmlCode = MutableStateFlow("")
     val htmlCode: StateFlow<String> = _htmlCode.asStateFlow()
@@ -64,6 +59,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateProjectName(name: String) { _projectName.value = name }
     fun updateActiveTab(tab: Int) { _activeTab.value = tab }
     fun setFullscreenPreview(active: Boolean) { _isFullscreenPreviewActive.value = active }
+    fun resetPublishState() { _publishState.value = PublishUiState.Idle }
 
     fun selectProject(project: HtmlProject) {
         _selectedLocalProject.value = project
@@ -80,9 +76,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveProjectLocally(onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            val currentProject = _selectedLocalProject.value
-            if (currentProject != null) {
-                val updated = currentProject.copy(
+            val current = _selectedLocalProject.value
+            if (current != null) {
+                val updated = current.copy(
                     name = _projectName.value,
                     htmlContent = _htmlCode.value,
                     updatedAt = System.currentTimeMillis()
@@ -90,12 +86,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 repository.updateProject(updated)
                 _selectedLocalProject.value = updated
             } else {
-                val newProject = HtmlProject(
+                val id = repository.insertProject(
+                    HtmlProject(name = _projectName.value, htmlContent = _htmlCode.value)
+                )
+                _selectedLocalProject.value = HtmlProject(
+                    id = id.toInt(),
                     name = _projectName.value,
                     htmlContent = _htmlCode.value
                 )
-                val id = repository.insertProject(newProject)
-                _selectedLocalProject.value = newProject.copy(id = id.toInt())
             }
             onSuccess()
         }
@@ -103,14 +101,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteProject(project: HtmlProject) {
         viewModelScope.launch {
-            repository.deleteProjectById(project.id)
-            if (_selectedLocalProject.value?.id == project.id) {
-                _selectedLocalProject.value = null
+            // If hosted, delete from cPanel first
+            if (!project.repoName.isNullOrEmpty()) {
+                _publishState.value = PublishUiState.Loading("Deleting from server...")
+                when (val result = repository.deleteFromCPanel(project.repoName)) {
+                    is DeleteResult.Success -> {
+                        repository.deleteProjectById(project.id)
+                        if (_selectedLocalProject.value?.id == project.id) {
+                            _selectedLocalProject.value = null
+                        }
+                        _publishState.value = PublishUiState.Idle
+                    }
+                    is DeleteResult.Error -> {
+                        // Delete locally anyway
+                        repository.deleteProjectById(project.id)
+                        if (_selectedLocalProject.value?.id == project.id) {
+                            _selectedLocalProject.value = null
+                        }
+                        _publishState.value = PublishUiState.Idle
+                    }
+                }
+            } else {
+                repository.deleteProjectById(project.id)
+                if (_selectedLocalProject.value?.id == project.id) {
+                    _selectedLocalProject.value = null
+                }
             }
         }
     }
-
-    fun resetPublishState() { _publishState.value = PublishUiState.Idle }
 
     fun publishProject() {
         val name = _projectName.value.trim()
@@ -121,32 +139,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (content.isEmpty()) {
-            _publishState.value = PublishUiState.Error("HTML content is empty.")
+            _publishState.value = PublishUiState.Error("HTML content cannot be empty.")
             return
         }
 
         viewModelScope.launch {
-            // Check hosted site limit
-            val hostedCount = savedProjects.first().count { it.publishedUrl != null }
-            val isUpdate = _selectedLocalProject.value?.publishedUrl != null
+            val hostedCount = savedProjects.first().count { !it.publishedUrl.isNullOrEmpty() }
+            val isUpdate = !_selectedLocalProject.value?.publishedUrl.isNullOrEmpty()
 
             if (!isUpdate && hostedCount >= MAX_HOSTED_SITES) {
                 _publishState.value = PublishUiState.Error(
-                    "You have reached the limit of $MAX_HOSTED_SITES hosted websites. " +
-                    "Please delete one from History before hosting a new one."
+                    "Hosting limit reached ($MAX_HOSTED_SITES websites). Delete one from History to continue."
                 )
                 return@launch
             }
 
             _publishState.value = PublishUiState.Loading("Uploading to server...")
 
-            val result = repository.publishToGitHub(name, content, "", "")
-            when (result) {
+            when (val result = repository.publishToGitHub(name, content, "", "")) {
                 is PublishResult.Success -> {
-                    _publishState.value = PublishUiState.Success(result.url, result.repoName)
-                    val currentProject = _selectedLocalProject.value
-                    if (currentProject != null) {
-                        repository.updateProject(currentProject.copy(
+                    val current = _selectedLocalProject.value
+                    if (current != null) {
+                        repository.updateProject(current.copy(
                             publishedUrl = result.url,
                             repoName = result.repoName,
                             updatedAt = System.currentTimeMillis()
@@ -159,13 +173,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             repoName = result.repoName
                         ))
                         _selectedLocalProject.value = HtmlProject(
-                            id = id.toInt(),
-                            name = name,
-                            htmlContent = content,
-                            publishedUrl = result.url,
-                            repoName = result.repoName
+                            id = id.toInt(), name = name, htmlContent = content,
+                            publishedUrl = result.url, repoName = result.repoName
                         )
                     }
+                    _publishState.value = PublishUiState.Success(result.url, result.repoName)
                 }
                 is PublishResult.Error -> {
                     _publishState.value = PublishUiState.Error(result.message)
@@ -174,9 +186,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun copyToClipboard(context: Context, text: String, label: String = "Published URL") {
+    fun copyToClipboard(context: Context, text: String, label: String = "Link") {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
-        Toast.makeText(context, "$label copied!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Link copied!", Toast.LENGTH_SHORT).show()
     }
 }
