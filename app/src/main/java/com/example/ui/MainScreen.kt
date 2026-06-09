@@ -192,12 +192,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     selectedTabIndex = activeTab,
                     containerColor = Color.White,
                     contentColor = Color(0xFF1A56DB),
-                    indicator = { tabPositions ->
-                        TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(tabPositions[activeTab]),
-                            color = Color(0xFF1A56DB)
-                        )
-                    }
+
                 ) {
                     listOf(
                         Pair(Icons.Default.Code, "Editor"),
