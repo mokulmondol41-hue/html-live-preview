@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import android.util.Base64
 import android.util.Log
 import com.example.BuildConfig
 import com.example.data.local.HtmlProjectDao
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -51,12 +53,13 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
                 .add("files[0]", "/public_html/$folderName")
                 .add("recursive", "1")
                 .build()
-            val req = Request.Builder()
-                .url("https://${BuildConfig.CPANEL_HOST}/execute/Fileman/delete_files")
-                .header("Authorization", cpanelAuth())
-                .post(body)
-                .build()
-            val res = client.newCall(req).execute()
+            val res = client.newCall(
+                Request.Builder()
+                    .url("https://${BuildConfig.CPANEL_HOST}/execute/Fileman/delete_files")
+                    .header("Authorization", cpanelAuth())
+                    .post(body)
+                    .build()
+            ).execute()
             val json = JSONObject(res.body?.string() ?: "{}")
             res.close()
             if (json.optInt("status", 0) == 1) DeleteResult.Success
@@ -84,32 +87,34 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
 
         try {
             // Step 1: Create directory
-            val mkdirBody = FormBody.Builder()
-                .add("dir", "/public_html")
-                .add("name", folderName)
-                .build()
             client.newCall(
                 Request.Builder()
                     .url("https://$host/execute/Fileman/mkdir")
                     .header("Authorization", auth)
-                    .post(mkdirBody)
+                    .post(FormBody.Builder()
+                        .add("dir", "/public_html")
+                        .add("name", folderName)
+                        .build())
                     .build()
             ).execute().close()
 
-            // Step 2: Save file content using FormBody
-            val saveBody = FormBody.Builder()
-                .add("dir", "/public_html/$folderName")
-                .add("filename", "index.html")
-                .add("content", htmlContent)
+            // Step 2: Upload file as multipart with "file" parameter
+            val htmlBytes = htmlContent.toByteArray(Charsets.UTF_8)
+            val multipart = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("dir", "/public_html/$folderName")
+                .addFormDataPart(
+                    "file",
+                    "index.html",
+                    htmlBytes.toRequestBody("text/html; charset=utf-8".toMediaType())
+                )
                 .build()
-
-            Log.d("CPANEL", "Saving file to /public_html/$folderName/index.html")
 
             val res = client.newCall(
                 Request.Builder()
-                    .url("https://$host/execute/Fileman/save_file_content")
+                    .url("https://$host/execute/Fileman/upload_files")
                     .header("Authorization", auth)
-                    .post(saveBody)
+                    .post(multipart)
                     .build()
             ).execute()
 
@@ -127,7 +132,7 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
             } else {
                 val errors = json.optJSONArray("errors")
                 val msg = if (errors != null && errors.length() > 0)
-                    errors.getString(0) else "Unknown error (HTTP $code)"
+                    errors.getString(0) else "Upload failed (HTTP $code)"
                 PublishResult.Error("Hosting failed: $msg")
             }
 
