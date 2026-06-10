@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -103,10 +104,7 @@ fun MainScreen(viewModel: MainViewModel) {
                             color = Color(0xFF6B7280))
                     }
                     Spacer(modifier = Modifier.weight(1f))
-                    IconButton(onClick = { viewModel.createNewProject() }) {
-                        Icon(Icons.Default.Add, contentDescription = "New Project",
-                            tint = Color(0xFF1A56DB))
-                    }
+
                 }
             }
         },

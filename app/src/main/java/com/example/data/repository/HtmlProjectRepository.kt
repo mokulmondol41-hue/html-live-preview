@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import android.util.Base64
 import android.util.Log
 import com.example.BuildConfig
 import com.example.data.local.HtmlProjectDao
@@ -8,13 +9,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.io.File
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 sealed class PublishResult {
@@ -34,7 +33,6 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
     suspend fun getProjectById(id: Int): HtmlProject? = htmlProjectDao.getProjectById(id)
     suspend fun insertProject(project: HtmlProject): Long = htmlProjectDao.insertProject(project)
     suspend fun updateProject(project: HtmlProject) = htmlProjectDao.updateProject(project)
-
     suspend fun deleteProjectById(id: Int) = htmlProjectDao.deleteProjectById(id)
 
     private fun buildClient() = OkHttpClient.Builder()
@@ -45,35 +43,25 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
         .build()
 
     suspend fun deleteFromCPanel(folderName: String): DeleteResult = withContext(Dispatchers.IO) {
-        val cpanelHost = BuildConfig.CPANEL_HOST
-        val cpanelUser = BuildConfig.CPANEL_USER
-        val cpanelToken = BuildConfig.CPANEL_TOKEN
-        val authHeader = "cpanel $cpanelUser:$cpanelToken"
+        val host = BuildConfig.CPANEL_HOST
+        val user = BuildConfig.CPANEL_USER
+        val token = BuildConfig.CPANEL_TOKEN
+        val auth = "cpanel $user:$token"
         val client = buildClient()
-
         try {
-            val url = "https://$cpanelHost/execute/Fileman/delete_files"
             val body = "files[0]=/public_html/$folderName&recursive=1"
             val req = Request.Builder()
-                .url(url)
-                .header("Authorization", authHeader)
+                .url("https://$host/execute/Fileman/delete_files")
+                .header("Authorization", auth)
                 .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
                 .build()
-
             val res = client.newCall(req).execute()
-            val resBody = res.body?.string() ?: ""
-            Log.d("CPANEL", "delete: ${res.code} $resBody")
-
-            val json = JSONObject(resBody)
-            if (json.optInt("status", 0) == 1) {
-                DeleteResult.Success
-            } else {
-                val err = json.optJSONArray("errors")?.optString(0) ?: "Delete failed"
-                DeleteResult.Error(err)
-            }
+            val json = JSONObject(res.body?.string() ?: "{}")
+            res.close()
+            if (json.optInt("status", 0) == 1) DeleteResult.Success
+            else DeleteResult.Error(json.optJSONArray("errors")?.optString(0) ?: "Delete failed")
         } catch (e: Exception) {
-            Log.e("CPANEL", "Delete error", e)
-            DeleteResult.Error(e.localizedMessage ?: "Unknown error")
+            DeleteResult.Error(e.localizedMessage ?: "Error")
         }
     }
 
@@ -86,42 +74,43 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
         val folderName = slugify(projectName)
         if (folderName.isEmpty()) return@withContext PublishResult.Error("Project name cannot be empty.")
 
-        val cpanelHost = BuildConfig.CPANEL_HOST
-        val cpanelUser = BuildConfig.CPANEL_USER
-        val cpanelToken = BuildConfig.CPANEL_TOKEN
+        val host = BuildConfig.CPANEL_HOST
+        val user = BuildConfig.CPANEL_USER
+        val cpToken = BuildConfig.CPANEL_TOKEN
         val siteUrl = BuildConfig.SITE_URL
-        val authHeader = "cpanel $cpanelUser:$cpanelToken"
+        val auth = "cpanel $user:$cpToken"
         val client = buildClient()
 
         try {
-            // Create folder
-            val mkdirUrl = "https://$cpanelHost/execute/Fileman/mkdir?dir=%2Fpublic_html&name=$folderName"
+            // Step 1: Create folder
             client.newCall(
-                Request.Builder().url(mkdirUrl).header("Authorization", authHeader)
-                    .post("".toRequestBody()).build()
+                Request.Builder()
+                    .url("https://$host/execute/Fileman/mkdir?dir=%2Fpublic_html&name=$folderName")
+                    .header("Authorization", auth)
+                    .post("".toRequestBody())
+                    .build()
             ).execute().close()
 
-            // Upload file
-            val tmpFile = File.createTempFile("index", ".html")
-            tmpFile.writeText(htmlContent, Charsets.UTF_8)
+            // Step 2: Save file using save_file_content with base64
+            val htmlBase64 = Base64.encodeToString(
+                htmlContent.toByteArray(Charsets.UTF_8), Base64.NO_WRAP
+            )
+            val encodedContent = URLEncoder.encode(htmlBase64, "UTF-8")
+            val body = "dir=%2Fpublic_html%2F$folderName&filename=index.html&content=$encodedContent&from_encoding=base64&to_encoding=utf-8"
 
-            val multipart = MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("dir", "/public_html/$folderName")
-                .addFormDataPart("file", "index.html", tmpFile.asRequestBody("text/html".toMediaType()))
-                .build()
-
-            val uploadRes = client.newCall(
+            val res = client.newCall(
                 Request.Builder()
-                    .url("https://$cpanelHost/execute/Fileman/upload_files")
-                    .header("Authorization", authHeader)
-                    .post(multipart).build()
+                    .url("https://$host/execute/Fileman/save_file_content")
+                    .header("Authorization", auth)
+                    .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+                    .build()
             ).execute()
 
-            val uploadBody = uploadRes.body?.string() ?: ""
-            tmpFile.delete()
+            val resBody = res.body?.string() ?: ""
+            res.close()
+            Log.d("CPANEL", "save_file: $resBody")
 
-            val json = JSONObject(uploadBody)
+            val json = JSONObject(resBody)
             if (json.optInt("status", 0) == 1) {
                 PublishResult.Success("$siteUrl/$folderName/", folderName)
             } else {
@@ -129,7 +118,7 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
                 PublishResult.Error("Hosting failed: $err")
             }
         } catch (e: Exception) {
-            Log.e("CPANEL", "Upload error", e)
+            Log.e("CPANEL", "Error", e)
             PublishResult.Error("Hosting failed: ${e.localizedMessage}")
         }
     }
