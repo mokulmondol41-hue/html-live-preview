@@ -214,7 +214,12 @@ fun MainScreen(viewModel: MainViewModel) {
                 2 -> HistoryLayout(
                     savedProjects = savedProjects,
                     onSelectProject = { viewModel.selectProject(it) },
-                    onDeleteProject = { viewModel.deleteProject(it) }
+                    onDeleteProject = { viewModel.deleteProject(it) },
+                    onCopyLink = { project ->
+                        project.publishedUrl?.let { url ->
+                            viewModel.copyToClipboard(context, url)
+                        }
+                    }
                 )
             }
         }
@@ -264,15 +269,27 @@ fun MainScreen(viewModel: MainViewModel) {
                         }
                     },
                     confirmButton = {
-                        Button(onClick = {
-                            viewModel.copyToClipboard(context, state.url)
-                            viewModel.resetPublishState()
-                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A56DB)),
-                            shape = RoundedCornerShape(10.dp)) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null,
-                                modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Copy Link", fontWeight = FontWeight.Bold)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                viewModel.copyToClipboard(context, state.url)
+                            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A56DB)),
+                                shape = RoundedCornerShape(10.dp)) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null,
+                                    modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Copy", fontWeight = FontWeight.Bold)
+                            }
+                            Button(onClick = {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(state.url))
+                                context.startActivity(intent)
+                            }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                                shape = RoundedCornerShape(10.dp)) {
+                                Icon(Icons.Default.OpenInBrowser, contentDescription = null,
+                                    modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Open", fontWeight = FontWeight.Bold)
+                            }
                         }
                     },
                     dismissButton = {
@@ -411,7 +428,8 @@ fun FullscreenPreview(htmlCode: String, onClose: () -> Unit) {
 fun HistoryLayout(
     savedProjects: List<HtmlProject>,
     onSelectProject: (HtmlProject) -> Unit,
-    onDeleteProject: (HtmlProject) -> Unit
+    onDeleteProject: (HtmlProject) -> Unit,
+    onCopyLink: (HtmlProject) -> Unit = {}
 ) {
     val hostedCount = savedProjects.count { !it.publishedUrl.isNullOrEmpty() }
 
