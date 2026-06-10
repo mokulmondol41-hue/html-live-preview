@@ -9,7 +9,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
 import com.example.data.model.HtmlProject
-import com.example.data.repository.DeleteResult
 import com.example.data.repository.HtmlProjectRepository
 import com.example.data.repository.PublishResult
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,9 +48,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeTab = MutableStateFlow(0)
     val activeTab: StateFlow<Int> = _activeTab.asStateFlow()
 
-    private val _selectedLocalProject = MutableStateFlow<HtmlProject?>(null)
-    val selectedLocalProject: StateFlow<HtmlProject?> = _selectedLocalProject.asStateFlow()
-
     private val _isFullscreenPreviewActive = MutableStateFlow(false)
     val isFullscreenPreviewActive: StateFlow<Boolean> = _isFullscreenPreviewActive.asStateFlow()
 
@@ -61,14 +57,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setFullscreenPreview(active: Boolean) { _isFullscreenPreviewActive.value = active }
     fun resetPublishState() { _publishState.value = PublishUiState.Idle }
 
+    // Project select করলে edit mode
     fun selectProject(project: HtmlProject) {
-        _selectedLocalProject.value = project
         _projectName.value = project.name
         _htmlCode.value = project.htmlContent
     }
 
+    // নতুন project শুরু করলে সব clear
     fun createNewProject() {
-        _selectedLocalProject.value = null
         _projectName.value = ""
         _htmlCode.value = ""
         _activeTab.value = 0
@@ -76,49 +72,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveProjectLocally(onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
-            val current = _selectedLocalProject.value
-            if (current != null) {
-                val updated = current.copy(
-                    name = _projectName.value,
-                    htmlContent = _htmlCode.value,
-                    updatedAt = System.currentTimeMillis()
-                )
-                repository.updateProject(updated)
-                _selectedLocalProject.value = updated
-            } else {
-                val id = repository.insertProject(
-                    HtmlProject(name = _projectName.value, htmlContent = _htmlCode.value)
-                )
-                _selectedLocalProject.value = HtmlProject(
-                    id = id.toInt(),
-                    name = _projectName.value,
-                    htmlContent = _htmlCode.value
-                )
-            }
+            val name = _projectName.value.trim()
+            if (name.isEmpty()) return@launch
+            repository.insertProject(
+                HtmlProject(name = name, htmlContent = _htmlCode.value)
+            )
             onSuccess()
         }
     }
 
     fun deleteProject(project: HtmlProject) {
         viewModelScope.launch {
-            // cPanel এ hosted থাকলে সেখান থেকেও delete করো
+            // cPanel এ hosted থাকলে সেখান থেকেও delete
             if (!project.repoName.isNullOrEmpty()) {
                 _publishState.value = PublishUiState.Loading("Deleting from server...")
                 repository.deleteFromCPanel(project.repoName)
                 _publishState.value = PublishUiState.Idle
             }
-            // Local থেকে delete
             repository.deleteProjectById(project.id)
-            if (_selectedLocalProject.value?.id == project.id) {
-                _selectedLocalProject.value = null
-            }
         }
     }
 
     fun publishProject() {
         val name = _projectName.value.trim()
         val content = _htmlCode.value
-        val currentProject = _selectedLocalProject.value
 
         if (name.isEmpty()) {
             _publishState.value = PublishUiState.Error("Please enter a project name.")
@@ -132,34 +109,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val allProjects = savedProjects.first()
 
-            // Duplicate name check — অন্য project এ একই নামে host আছে কিনা
-            val slugName = name.trim().lowercase()
-                .replace("[^a-z0-9\\-_]".toRegex(), "-")
-                .replace("-+".toRegex(), "-")
-                .removePrefix("-").removeSuffix("-")
+            // Slug name বানাই
+            val slugName = slugify(name)
 
+            // Duplicate name check
             val duplicate = allProjects.find { p ->
-                p.id != (currentProject?.id ?: -1) &&
-                !p.repoName.isNullOrEmpty() &&
-                p.repoName == slugName
+                !p.repoName.isNullOrEmpty() && p.repoName == slugName
             }
-
             if (duplicate != null) {
                 _publishState.value = PublishUiState.Error(
-                    "A website with the name \"${duplicate.name}\" is already hosted. " +
-                    "Please choose a different name."
+                    "\"${duplicate.name}\" is already hosted. Please choose a different name."
                 )
                 return@launch
             }
 
             // Limit check
-            val isUpdate = !currentProject?.publishedUrl.isNullOrEmpty()
             val hostedCount = allProjects.count { !it.publishedUrl.isNullOrEmpty() }
-
-            if (!isUpdate && hostedCount >= MAX_HOSTED_SITES) {
+            if (hostedCount >= MAX_HOSTED_SITES) {
                 _publishState.value = PublishUiState.Error(
-                    "Hosting limit reached ($hostedCount/$MAX_HOSTED_SITES). " +
-                    "Delete one from History to continue."
+                    "Limit reached ($hostedCount/$MAX_HOSTED_SITES). Delete one from History first."
                 )
                 return@launch
             }
@@ -168,26 +136,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             when (val result = repository.publishToGitHub(name, content, "", "")) {
                 is PublishResult.Success -> {
-                    if (currentProject != null) {
-                        repository.updateProject(currentProject.copy(
-                            name = name,
-                            htmlContent = content,
-                            publishedUrl = result.url,
-                            repoName = result.repoName,
-                            updatedAt = System.currentTimeMillis()
-                        ))
-                    } else {
-                        val id = repository.insertProject(HtmlProject(
-                            name = name,
-                            htmlContent = content,
-                            publishedUrl = result.url,
-                            repoName = result.repoName
-                        ))
-                        _selectedLocalProject.value = HtmlProject(
-                            id = id.toInt(), name = name, htmlContent = content,
-                            publishedUrl = result.url, repoName = result.repoName
-                        )
-                    }
+                    // সবসময় নতুন row insert করো — update না
+                    repository.insertProject(HtmlProject(
+                        name = name,
+                        htmlContent = content,
+                        publishedUrl = result.url,
+                        repoName = result.repoName
+                    ))
+                    // Editor clear করি নতুন project এর জন্য
+                    _projectName.value = ""
+                    _htmlCode.value = ""
                     _publishState.value = PublishUiState.Success(result.url, result.repoName)
                 }
                 is PublishResult.Error -> {
@@ -196,6 +154,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    private fun slugify(name: String) = name.trim()
+        .lowercase()
+        .replace("[^a-z0-9\\-_]".toRegex(), "-")
+        .replace("-+".toRegex(), "-")
+        .removePrefix("-").removeSuffix("-")
 
     fun copyToClipboard(context: Context, text: String, label: String = "Link") {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
