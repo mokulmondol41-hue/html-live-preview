@@ -1,6 +1,5 @@
 package com.example.data.repository
 
-import android.util.Base64
 import android.util.Log
 import com.example.BuildConfig
 import com.example.data.local.HtmlProjectDao
@@ -8,7 +7,7 @@ import com.example.data.model.HtmlProject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import okhttp3.Credentials
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -42,32 +41,20 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
         .hostnameVerifier { _, _ -> true }
         .build()
 
-    private fun cpanelAuth() = "cpanel ${BuildConfig.CPANEL_USER}:${BuildConfig.CPANEL_TOKEN}"
-
-    // cPanel UAPI - create directory
-    private suspend fun createDir(client: OkHttpClient, folderName: String) {
-        try {
-            val url = "https://${BuildConfig.CPANEL_HOST}/execute/Fileman/mkdir" +
-                "?dir=%2Fpublic_html&name=$folderName"
-            val req = Request.Builder()
-                .url(url)
-                .header("Authorization", cpanelAuth())
-                .post("".toRequestBody())
-                .build()
-            client.newCall(req).execute().close()
-        } catch (e: Exception) {
-            Log.w("CPANEL", "mkdir: ${e.message}")
-        }
-    }
+    private fun cpanelAuth() =
+        "cpanel ${BuildConfig.CPANEL_USER}:${BuildConfig.CPANEL_TOKEN}"
 
     suspend fun deleteFromCPanel(folderName: String): DeleteResult = withContext(Dispatchers.IO) {
         val client = buildClient()
         try {
-            val body = "files[0]=/public_html/$folderName&recursive=1"
+            val body = FormBody.Builder()
+                .add("files[0]", "/public_html/$folderName")
+                .add("recursive", "1")
+                .build()
             val req = Request.Builder()
                 .url("https://${BuildConfig.CPANEL_HOST}/execute/Fileman/delete_files")
                 .header("Authorization", cpanelAuth())
-                .post(body.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+                .post(body)
                 .build()
             val res = client.newCall(req).execute()
             val json = JSONObject(res.body?.string() ?: "{}")
@@ -92,29 +79,37 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
         }
 
         val client = buildClient()
+        val host = BuildConfig.CPANEL_HOST
+        val auth = cpanelAuth()
 
         try {
-            // Step 1: Create folder
-            createDir(client, folderName)
+            // Step 1: Create directory
+            val mkdirBody = FormBody.Builder()
+                .add("dir", "/public_html")
+                .add("name", folderName)
+                .build()
+            client.newCall(
+                Request.Builder()
+                    .url("https://$host/execute/Fileman/mkdir")
+                    .header("Authorization", auth)
+                    .post(mkdirBody)
+                    .build()
+            ).execute().close()
 
-            // Step 2: Upload via cPanel UAPI save_file_content
-            // Content must be plain string (not base64) for this endpoint
-            val host = BuildConfig.CPANEL_HOST
-            val auth = cpanelAuth()
+            // Step 2: Save file content using FormBody
+            val saveBody = FormBody.Builder()
+                .add("dir", "/public_html/$folderName")
+                .add("filename", "index.html")
+                .add("content", htmlContent)
+                .build()
 
-            // Build form body manually
-            val content = htmlContent
-            val encodedContent = java.net.URLEncoder.encode(content, "UTF-8")
-            val encodedDir = java.net.URLEncoder.encode("/public_html/$folderName", "UTF-8")
-            val formBody = "dir=$encodedDir&filename=index.html&content=$encodedContent"
-
-            Log.d("CPANEL", "Uploading to /public_html/$folderName/index.html")
+            Log.d("CPANEL", "Saving file to /public_html/$folderName/index.html")
 
             val res = client.newCall(
                 Request.Builder()
                     .url("https://$host/execute/Fileman/save_file_content")
                     .header("Authorization", auth)
-                    .post(formBody.toRequestBody("application/x-www-form-urlencoded".toMediaType()))
+                    .post(saveBody)
                     .build()
             ).execute()
 
@@ -122,22 +117,18 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
             val code = res.code
             res.close()
 
-            Log.d("CPANEL", "Response $code: $resBody")
+            Log.d("CPANEL", "HTTP $code: $resBody")
 
-            if (code == 200) {
-                val json = try { JSONObject(resBody) } catch (e: Exception) { JSONObject() }
-                val status = json.optInt("status", 0)
-                if (status == 1) {
-                    val liveUrl = "${BuildConfig.SITE_URL}/$folderName/"
-                    PublishResult.Success(liveUrl, folderName)
-                } else {
-                    val errors = json.optJSONArray("errors")
-                    val errMsg = if (errors != null && errors.length() > 0)
-                        errors.getString(0) else "Upload failed"
-                    PublishResult.Error("Hosting failed: $errMsg")
-                }
+            val json = try { JSONObject(resBody) } catch (e: Exception) { JSONObject() }
+            val status = json.optInt("status", 0)
+
+            if (status == 1) {
+                PublishResult.Success("${BuildConfig.SITE_URL}/$folderName/", folderName)
             } else {
-                PublishResult.Error("Server error: HTTP $code")
+                val errors = json.optJSONArray("errors")
+                val msg = if (errors != null && errors.length() > 0)
+                    errors.getString(0) else "Unknown error (HTTP $code)"
+                PublishResult.Error("Hosting failed: $msg")
             }
 
         } catch (e: Exception) {
