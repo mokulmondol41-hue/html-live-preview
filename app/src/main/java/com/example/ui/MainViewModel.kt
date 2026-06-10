@@ -101,31 +101,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteProject(project: HtmlProject) {
         viewModelScope.launch {
-            // If hosted, delete from cPanel first
+            // cPanel এ hosted থাকলে সেখান থেকেও delete করো
             if (!project.repoName.isNullOrEmpty()) {
                 _publishState.value = PublishUiState.Loading("Deleting from server...")
-                when (val result = repository.deleteFromCPanel(project.repoName)) {
-                    is DeleteResult.Success -> {
-                        repository.deleteProjectById(project.id)
-                        if (_selectedLocalProject.value?.id == project.id) {
-                            _selectedLocalProject.value = null
-                        }
-                        _publishState.value = PublishUiState.Idle
-                    }
-                    is DeleteResult.Error -> {
-                        // Delete locally anyway
-                        repository.deleteProjectById(project.id)
-                        if (_selectedLocalProject.value?.id == project.id) {
-                            _selectedLocalProject.value = null
-                        }
-                        _publishState.value = PublishUiState.Idle
-                    }
-                }
-            } else {
-                repository.deleteProjectById(project.id)
-                if (_selectedLocalProject.value?.id == project.id) {
-                    _selectedLocalProject.value = null
-                }
+                repository.deleteFromCPanel(project.repoName)
+                _publishState.value = PublishUiState.Idle
+            }
+            // Local থেকে delete
+            repository.deleteProjectById(project.id)
+            if (_selectedLocalProject.value?.id == project.id) {
+                _selectedLocalProject.value = null
             }
         }
     }
@@ -133,6 +118,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun publishProject() {
         val name = _projectName.value.trim()
         val content = _htmlCode.value
+        val currentProject = _selectedLocalProject.value
 
         if (name.isEmpty()) {
             _publishState.value = PublishUiState.Error("Please enter a project name.")
@@ -144,12 +130,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            val hostedCount = savedProjects.first().count { !it.publishedUrl.isNullOrEmpty() }
-            val isUpdate = !_selectedLocalProject.value?.publishedUrl.isNullOrEmpty()
+            val allProjects = savedProjects.first()
+
+            // Duplicate name check — অন্য project এ একই নামে host আছে কিনা
+            val slugName = name.trim().lowercase()
+                .replace("[^a-z0-9\\-_]".toRegex(), "-")
+                .replace("-+".toRegex(), "-")
+                .removePrefix("-").removeSuffix("-")
+
+            val duplicate = allProjects.find { p ->
+                p.id != (currentProject?.id ?: -1) &&
+                !p.repoName.isNullOrEmpty() &&
+                p.repoName == slugName
+            }
+
+            if (duplicate != null) {
+                _publishState.value = PublishUiState.Error(
+                    "A website with the name \"${duplicate.name}\" is already hosted. " +
+                    "Please choose a different name."
+                )
+                return@launch
+            }
+
+            // Limit check
+            val isUpdate = !currentProject?.publishedUrl.isNullOrEmpty()
+            val hostedCount = allProjects.count { !it.publishedUrl.isNullOrEmpty() }
 
             if (!isUpdate && hostedCount >= MAX_HOSTED_SITES) {
                 _publishState.value = PublishUiState.Error(
-                    "Hosting limit reached ($MAX_HOSTED_SITES websites). Delete one from History to continue."
+                    "Hosting limit reached ($hostedCount/$MAX_HOSTED_SITES). " +
+                    "Delete one from History to continue."
                 )
                 return@launch
             }
@@ -158,9 +168,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             when (val result = repository.publishToGitHub(name, content, "", "")) {
                 is PublishResult.Success -> {
-                    val current = _selectedLocalProject.value
-                    if (current != null) {
-                        repository.updateProject(current.copy(
+                    if (currentProject != null) {
+                        repository.updateProject(currentProject.copy(
+                            name = name,
+                            htmlContent = content,
                             publishedUrl = result.url,
                             repoName = result.repoName,
                             updatedAt = System.currentTimeMillis()
