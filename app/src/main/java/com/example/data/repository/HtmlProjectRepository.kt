@@ -1,6 +1,5 @@
 package com.example.data.repository
 
-import android.util.Base64
 import android.util.Log
 import com.example.BuildConfig
 import com.example.data.local.HtmlProjectDao
@@ -48,23 +47,55 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
 
     suspend fun deleteFromCPanel(folderName: String): DeleteResult = withContext(Dispatchers.IO) {
         val client = buildClient()
+        val host = BuildConfig.CPANEL_HOST
+        val auth = cpanelAuth()
+
         try {
-            val body = FormBody.Builder()
-                .add("files[0]", "/public_html/$folderName")
-                .add("recursive", "1")
+            // Step 1: Delete index.html inside folder
+            val deleteFileBody = FormBody.Builder()
+                .add("files-0-path", "/public_html/$folderName")
+                .add("files-0-name", "index.html")
                 .build()
+
+            client.newCall(
+                Request.Builder()
+                    .url("https://$host/execute/Fileman/delete_files")
+                    .header("Authorization", auth)
+                    .post(deleteFileBody)
+                    .build()
+            ).execute().use { res ->
+                Log.d("CPANEL_DELETE", "Delete file: ${res.code} ${res.body?.string()}")
+            }
+
+            // Step 2: Delete the folder itself
+            val deleteFolderBody = FormBody.Builder()
+                .add("files-0-path", "/public_html")
+                .add("files-0-name", folderName)
+                .build()
+
             val res = client.newCall(
                 Request.Builder()
-                    .url("https://${BuildConfig.CPANEL_HOST}/execute/Fileman/delete_files")
-                    .header("Authorization", cpanelAuth())
-                    .post(body)
+                    .url("https://$host/execute/Fileman/delete_files")
+                    .header("Authorization", auth)
+                    .post(deleteFolderBody)
                     .build()
             ).execute()
-            val json = JSONObject(res.body?.string() ?: "{}")
+
+            val resBody = res.body?.string() ?: "{}"
+            val code = res.code
             res.close()
-            if (json.optInt("status", 0) == 1) DeleteResult.Success
-            else DeleteResult.Error("Delete failed")
+
+            Log.d("CPANEL_DELETE", "Delete folder: $code $resBody")
+
+            val json = try { JSONObject(resBody) } catch (e: Exception) { JSONObject() }
+            if (json.optInt("status", 0) == 1) {
+                DeleteResult.Success
+            } else {
+                val err = json.optJSONArray("errors")?.optString(0) ?: "Delete failed"
+                DeleteResult.Error(err)
+            }
         } catch (e: Exception) {
+            Log.e("CPANEL_DELETE", "Error", e)
             DeleteResult.Error(e.localizedMessage ?: "Error")
         }
     }
@@ -86,7 +117,7 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
         val auth = cpanelAuth()
 
         try {
-            // Step 1: Create directory
+            // Create directory
             client.newCall(
                 Request.Builder()
                     .url("https://$host/execute/Fileman/mkdir")
@@ -98,14 +129,13 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
                     .build()
             ).execute().close()
 
-            // Step 2: Upload file as multipart with "file" parameter
+            // Upload file as multipart
             val htmlBytes = htmlContent.toByteArray(Charsets.UTF_8)
             val multipart = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("dir", "/public_html/$folderName")
                 .addFormDataPart(
-                    "file",
-                    "index.html",
+                    "file", "index.html",
                     htmlBytes.toRequestBody("text/html; charset=utf-8".toMediaType())
                 )
                 .build()
@@ -122,20 +152,15 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
             val code = res.code
             res.close()
 
-            Log.d("CPANEL", "HTTP $code: $resBody")
+            Log.d("CPANEL", "Upload: $code $resBody")
 
             val json = try { JSONObject(resBody) } catch (e: Exception) { JSONObject() }
-            val status = json.optInt("status", 0)
-
-            if (status == 1) {
+            if (json.optInt("status", 0) == 1) {
                 PublishResult.Success("${BuildConfig.SITE_URL}/$folderName/", folderName)
             } else {
-                val errors = json.optJSONArray("errors")
-                val msg = if (errors != null && errors.length() > 0)
-                    errors.getString(0) else "Upload failed (HTTP $code)"
-                PublishResult.Error("Hosting failed: $msg")
+                val err = json.optJSONArray("errors")?.optString(0) ?: "Upload failed (HTTP $code)"
+                PublishResult.Error("Hosting failed: $err")
             }
-
         } catch (e: Exception) {
             Log.e("CPANEL", "Error", e)
             PublishResult.Error("Hosting failed: ${e.localizedMessage}")
