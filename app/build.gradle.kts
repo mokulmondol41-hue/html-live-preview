@@ -13,8 +13,8 @@ android {
         applicationId = "com.aistudio.htmlhosting.kbyqpj"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         buildConfigField("String", "CPANEL_HOST", "\"ind.webs-x.xyz:2083\"")
         buildConfigField("String", "CPANEL_USER", "\"wuylvxfu\"")
         buildConfigField("String", "CPANEL_TOKEN", "\"RP5XWQXLPGB6QJVONSMKS2UA3590ACDV\"")
