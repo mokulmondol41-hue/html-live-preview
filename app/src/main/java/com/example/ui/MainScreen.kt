@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.FabPosition
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -109,23 +111,16 @@ fun MainScreen(viewModel: MainViewModel) {
         },
         floatingActionButton = {
             if (activeTab != 2) {
-                FloatingActionButton(
+                ExtendedFloatingActionButton(
                     onClick = { viewModel.publishProject() },
+                    icon = { Icon(Icons.Default.CloudUpload, contentDescription = null) },
+                    text = { Text("Publish to Web", fontWeight = FontWeight.Bold) },
                     containerColor = Color(0xFF1A56DB),
                     contentColor = Color.White,
-                    modifier = Modifier.shadow(12.dp, RoundedCornerShape(16.dp))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Publish to Web", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    }
-                }
+                )
             }
         },
+        floatingActionButtonPosition = FabPosition.End,
         containerColor = Color(0xFFF0F4FF)
     ) { padding ->
         Column(
@@ -135,13 +130,13 @@ fun MainScreen(viewModel: MainViewModel) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp)
-                    .shadow(6.dp, RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .shadow(4.dp, RoundedCornerShape(12.dp)),
+                shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -180,8 +175,8 @@ fun MainScreen(viewModel: MainViewModel) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp)
-                    .shadow(4.dp, RoundedCornerShape(12.dp)),
+                    .padding(horizontal = 12.dp, vertical = 2.dp)
+                    .shadow(3.dp, RoundedCornerShape(12.dp)),
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
@@ -208,7 +203,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             when (activeTab) {
                 0 -> CodeEditorPane(htmlCode = htmlCode,
@@ -328,7 +323,10 @@ fun CodeEditorPane(htmlCode: String, onCodeChange: (String) -> Unit, onSave: () 
                 Text("Save Draft", color = Color(0xFF1A56DB), fontWeight = FontWeight.SemiBold)
             }
         }
-        Card(modifier = Modifier.fillMaxSize().shadow(4.dp, RoundedCornerShape(16.dp)),
+        Card(modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 80.dp)
+                .shadow(4.dp, RoundedCornerShape(16.dp)),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White)) {
             OutlinedTextField(
@@ -362,7 +360,10 @@ fun LivePreviewPane(htmlCode: String, onFullscreen: () -> Unit) {
                 Text("Fullscreen", color = Color(0xFF1A56DB), fontWeight = FontWeight.SemiBold)
             }
         }
-        Card(modifier = Modifier.fillMaxSize().shadow(4.dp, RoundedCornerShape(16.dp)),
+        Card(modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = 80.dp)
+                .shadow(4.dp, RoundedCornerShape(16.dp)),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White)) {
             WebViewContainer(htmlCode = htmlCode, modifier = Modifier.fillMaxSize()
