@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -266,6 +267,27 @@ fun MainScreen(viewModel: MainViewModel) {
                                     color = Color(0xFF1A56DB), fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium)
                             }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFE3F2FD))
+                                    .clickable {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse("https://t.me/shuvo_bhai11"))
+                                        context.startActivity(intent)
+                                    }
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Send, contentDescription = null,
+                                    tint = Color(0xFF0088CC), modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Join our Telegram channel",
+                                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF0088CC))
+                            }
                         }
                     },
                     confirmButton = {
@@ -331,8 +353,19 @@ fun MainScreen(viewModel: MainViewModel) {
 
 @Composable
 fun CodeEditorPane(htmlCode: String, onCodeChange: (String) -> Unit, onSave: () -> Unit) {
+    val context = LocalContext.current
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = {
+                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse("https://t.me/shuvo_bhai11"))
+                context.startActivity(intent)
+            }) {
+                Icon(Icons.Default.Send, contentDescription = "Telegram",
+                    tint = Color(0xFF0088CC), modifier = Modifier.size(20.dp))
+            }
             TextButton(onClick = onSave) {
                 Icon(Icons.Default.Save, contentDescription = null,
                     modifier = Modifier.size(16.dp), tint = Color(0xFF1A56DB))
@@ -451,6 +484,26 @@ fun HistoryLayout(
                     Text("Create your first website and publish it to the web.",
                         color = Color(0xFF6B7280), fontSize = 13.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFE3F2FD))
+                            .clickable {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://t.me/shuvo_bhai11"))
+                                context.startActivity(intent)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Send, contentDescription = null,
+                            tint = Color(0xFF0088CC), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Join Telegram for tips & updates",
+                            fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF0088CC))
+                    }
                 }
             }
         } else {
