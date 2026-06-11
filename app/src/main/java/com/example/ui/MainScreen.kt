@@ -464,6 +464,7 @@ fun HistoryLayout(
     onDeleteProject: (HtmlProject) -> Unit,
     onCopyLink: (HtmlProject) -> Unit = {}
 ) {
+    val context = LocalContext.current
     val hostedCount = savedProjects.count { !it.publishedUrl.isNullOrEmpty() }
 
     Column(modifier = Modifier.fillMaxSize()) {
