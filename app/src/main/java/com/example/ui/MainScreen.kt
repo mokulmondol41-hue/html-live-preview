@@ -34,6 +34,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.HtmlProject
+import com.example.util.SecureConfig
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -275,7 +276,7 @@ fun MainScreen(viewModel: MainViewModel) {
                                     .background(Color(0xFFE3F2FD))
                                     .clickable {
                                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
-                                            android.net.Uri.parse("https://t.me/shuvo_bhai11"))
+                                            android.net.Uri.parse(SecureConfig.TELEGRAM))
                                         context.startActivity(intent)
                                     }
                                     .padding(10.dp),
@@ -360,7 +361,7 @@ fun CodeEditorPane(htmlCode: String, onCodeChange: (String) -> Unit, onSave: () 
             verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = {
                 val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
-                    android.net.Uri.parse("https://t.me/shuvo_bhai11"))
+                    android.net.Uri.parse(SecureConfig.TELEGRAM))
                 context.startActivity(intent)
             }) {
                 Icon(Icons.Default.Send, contentDescription = "Telegram",
@@ -492,7 +493,7 @@ fun HistoryLayout(
                             .background(Color(0xFFE3F2FD))
                             .clickable {
                                 val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse("https://t.me/shuvo_bhai11"))
+                                    android.net.Uri.parse(SecureConfig.TELEGRAM))
                                 context.startActivity(intent)
                             }
                             .padding(horizontal = 16.dp, vertical = 10.dp),

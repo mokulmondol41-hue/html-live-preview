@@ -1,7 +1,7 @@
 package com.example.data.repository
 
 import android.util.Log
-import com.example.BuildConfig
+import com.example.util.SecureConfig
 import com.example.data.local.HtmlProjectDao
 import com.example.data.model.HtmlProject
 import kotlinx.coroutines.Dispatchers
@@ -43,11 +43,11 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
         .build()
 
     private fun cpanelAuth() =
-        "cpanel ${BuildConfig.CPANEL_USER}:${BuildConfig.CPANEL_TOKEN}"
+        "cpanel ${SecureConfig.USER}:${SecureConfig.TOKEN}"
 
     suspend fun deleteFromCPanel(folderName: String): DeleteResult = withContext(Dispatchers.IO) {
         val client = buildClient()
-        val host = BuildConfig.CPANEL_HOST
+        val host = SecureConfig.HOST
         val auth = cpanelAuth()
 
         try {
@@ -113,7 +113,7 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
         }
 
         val client = buildClient()
-        val host = BuildConfig.CPANEL_HOST
+        val host = SecureConfig.HOST
         val auth = cpanelAuth()
 
         try {
@@ -156,7 +156,7 @@ class HtmlProjectRepository(private val htmlProjectDao: HtmlProjectDao) {
 
             val json = try { JSONObject(resBody) } catch (e: Exception) { JSONObject() }
             if (json.optInt("status", 0) == 1) {
-                PublishResult.Success("${BuildConfig.SITE_URL}/$folderName/", folderName)
+                PublishResult.Success("${SecureConfig.SITE}/$folderName/", folderName)
             } else {
                 val err = json.optJSONArray("errors")?.optString(0) ?: "Upload failed (HTTP $code)"
                 PublishResult.Error("Hosting failed: $err")
